@@ -1,1 +1,1 @@
-web: python -m backend.main
+web: .venv/bin/python -m backend.main
