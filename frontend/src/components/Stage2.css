@@ -1,10 +1,10 @@
 .stage2 {
-  background: #fafafa;
+  background: var(--bg-secondary, #fafafa);
 }
 
 .stage2 h4 {
   margin: 20px 0 8px 0;
-  color: #333;
+  color: var(--text-primary, #333);
   font-size: 14px;
   font-weight: 600;
 }
@@ -15,7 +15,7 @@
 
 .stage-description {
   margin: 0 0 12px 0;
-  color: #666;
+  color: var(--text-secondary, #666);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -45,7 +45,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px;
-  background: #ffffff;
+  background: var(--bg-primary, #ffffff);
   border-radius: 6px;
   border: 1px solid #d0e7ff;
 }
@@ -59,14 +59,14 @@
 
 .rank-model {
   flex: 1;
-  color: #333;
+  color: var(--text-primary, #333);
   font-family: monospace;
   font-size: 14px;
   font-weight: 500;
 }
 
 .rank-score {
-  color: #666;
+  color: var(--text-secondary, #666);
   font-size: 13px;
   font-family: monospace;
 }
@@ -80,46 +80,46 @@
 
 .stage2 .tab {
   padding: 8px 16px;
-  background: #ffffff;
-  border: 1px solid #d0d0d0;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #d0d0d0);
   border-radius: 6px 6px 0 0;
-  color: #666;
+  color: var(--text-secondary, #666);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .stage2 .tab:hover {
-  background: #f0f0f0;
-  color: #333;
-  border-color: #4a90e2;
+  background: var(--bg-tertiary, #f0f0f0);
+  color: var(--text-primary, #333);
+  border-color: var(--accent-color, #4a90e2);
 }
 
 .stage2 .tab.active {
-  background: #ffffff;
-  color: #4a90e2;
-  border-color: #4a90e2;
-  border-bottom-color: #ffffff;
+  background: var(--bg-primary, #ffffff);
+  color: var(--accent-color, #4a90e2);
+  border-color: var(--accent-color, #4a90e2);
+  border-bottom-color: var(--bg-primary, #ffffff);
   font-weight: 600;
 }
 
 .stage2 .tab-content {
-  background: #ffffff;
+  background: var(--bg-primary, #ffffff);
   padding: 16px;
   border-radius: 6px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color, #e0e0e0);
   margin-bottom: 20px;
 }
 
 .ranking-model {
-  color: #888;
+  color: var(--text-secondary, #888);
   font-size: 12px;
   font-family: monospace;
   margin-bottom: 12px;
 }
 
 .ranking-content {
-  color: #333;
+  color: var(--text-primary, #333);
   line-height: 1.6;
   font-size: 14px;
 }
@@ -127,7 +127,7 @@
 .parsed-ranking {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 2px solid #e0e0e0;
+  border-top: 2px solid var(--border-color, #e0e0e0);
 }
 
 .parsed-ranking strong {
@@ -138,7 +138,7 @@
 .parsed-ranking ol {
   margin: 8px 0 0 0;
   padding-left: 24px;
-  color: #333;
+  color: var(--text-primary, #333);
 }
 
 .parsed-ranking li {
@@ -148,6 +148,75 @@
 }
 
 .rank-count {
-  color: #999;
+  color: var(--text-secondary, #999);
   font-size: 12px;
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .stage2 {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .stage2 h4 {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .aggregate-rankings {
+  background: #1e3a5f;
+  border-color: #2a4f7f;
+}
+
+[data-theme="dark"] .aggregate-rankings h4 {
+  color: #5a9ff2;
+}
+
+[data-theme="dark"] .aggregate-item {
+  background: var(--bg-primary);
+  border-color: #2a4f7f;
+}
+
+[data-theme="dark"] .rank-position {
+  color: #5a9ff2;
+}
+
+[data-theme="dark"] .rank-model {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .stage2 .tab {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .stage2 .tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .stage2 .tab.active {
+  background: var(--bg-primary);
+  color: var(--accent-color);
+  border-bottom-color: var(--bg-primary);
+}
+
+[data-theme="dark"] .stage2 .tab-content {
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .ranking-content {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .parsed-ranking {
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .parsed-ranking strong {
+  color: #5a9ff2;
+}
+
+[data-theme="dark"] .parsed-ranking ol {
+  color: var(--text-primary);
 }

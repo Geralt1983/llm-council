@@ -1,28 +1,57 @@
 """FastAPI backend for LLM Council."""
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
 import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import (
+    run_full_council,
+    generate_conversation_title,
+    stage1_collect_responses,
+    stage2_collect_rankings,
+    stage3_synthesize_final,
+    calculate_aggregate_rankings
+)
+from .db.session import init_db, migrate_from_json
 
-app = FastAPI(title="LLM Council API")
+# Initialize database on module load
+init_db()
 
-# Enable CORS for local development
+# Migrate existing JSON conversations if any
+migrate_from_json()
+
+app = FastAPI(title="LLM Council API", version="1.1.0")
+
+# CORS origins - allow localhost for dev and configured frontend URL for production
+cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+# Add production frontend URL if configured
+frontend_url = os.environ.get("FRONTEND_URL")
+if frontend_url:
+    cors_origins.append(frontend_url)
+    # Also allow without trailing slash
+    cors_origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# Request/Response Models
 
 class CreateConversationRequest(BaseModel):
     """Request to create a new conversation."""
@@ -50,11 +79,34 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
+class CouncilConfigRequest(BaseModel):
+    """Request to update council configuration."""
+    council_models: Optional[List[str]] = None
+    chairman_model: Optional[str] = None
+    theme: Optional[str] = None
+
+
+class CouncilConfigResponse(BaseModel):
+    """Council configuration response."""
+    council_models: List[str]
+    chairman_model: str
+    theme: str
+
+
+class ExportRequest(BaseModel):
+    """Request to export a conversation."""
+    format: str = "markdown"  # markdown, json
+
+
+# Health Check
+
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "LLM Council API"}
+    return {"status": "ok", "service": "LLM Council API", "version": "1.1.0"}
 
+
+# Conversation Endpoints
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
 async def list_conversations():
@@ -77,6 +129,15 @@ async def get_conversation(conversation_id: str):
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
+    deleted = storage.delete_conversation(conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "deleted", "id": conversation_id}
 
 
 @app.post("/api/conversations/{conversation_id}/message")
@@ -111,7 +172,8 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         conversation_id,
         stage1_results,
         stage2_results,
-        stage3_result
+        stage3_result,
+        metadata
     )
 
     # Return the complete response with metadata
@@ -169,12 +231,17 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 storage.update_conversation_title(conversation_id, title)
                 yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
 
-            # Save complete assistant message
+            # Save complete assistant message with metadata
+            metadata = {
+                "label_to_model": label_to_model,
+                "aggregate_rankings": aggregate_rankings
+            }
             storage.add_assistant_message(
                 conversation_id,
                 stage1_results,
                 stage2_results,
-                stage3_result
+                stage3_result,
+                metadata
             )
 
             # Send completion event
@@ -194,6 +261,135 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     )
 
 
+# Settings Endpoints
+
+@app.get("/api/settings/council", response_model=CouncilConfigResponse)
+async def get_council_config():
+    """Get the current council configuration."""
+    config = storage.get_council_config()
+    return CouncilConfigResponse(
+        council_models=config.get("council_models", []),
+        chairman_model=config.get("chairman_model", ""),
+        theme=config.get("theme", "light")
+    )
+
+
+@app.put("/api/settings/council", response_model=CouncilConfigResponse)
+async def update_council_config(request: CouncilConfigRequest):
+    """Update the council configuration."""
+    config = storage.update_council_config(
+        council_models=request.council_models,
+        chairman_model=request.chairman_model,
+        theme=request.theme
+    )
+    return CouncilConfigResponse(
+        council_models=config.get("council_models", []),
+        chairman_model=config.get("chairman_model", ""),
+        theme=config.get("theme", "light")
+    )
+
+
+# Export Endpoints
+
+@app.post("/api/conversations/{conversation_id}/export")
+async def export_conversation(conversation_id: str, request: ExportRequest):
+    """Export a conversation to the specified format."""
+    conversation = storage.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if request.format == "json":
+        return conversation
+
+    elif request.format == "markdown":
+        md = generate_markdown_export(conversation)
+        return StreamingResponse(
+            iter([md]),
+            media_type="text/markdown",
+            headers={
+                "Content-Disposition": f"attachment; filename={conversation_id}.md"
+            }
+        )
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {request.format}")
+
+
+def generate_markdown_export(conversation: Dict[str, Any]) -> str:
+    """Generate markdown export of a conversation."""
+    lines = [
+        f"# {conversation['title']}",
+        f"",
+        f"*Exported from LLM Council*",
+        f"*Created: {conversation['created_at']}*",
+        f"",
+        "---",
+        ""
+    ]
+
+    for msg in conversation["messages"]:
+        if msg["role"] == "user":
+            lines.extend([
+                "## User",
+                "",
+                msg["content"],
+                "",
+                "---",
+                ""
+            ])
+        else:
+            lines.extend([
+                "## LLM Council Response",
+                "",
+                "### Stage 1: Individual Responses",
+                ""
+            ])
+
+            if msg.get("stage1"):
+                for resp in msg["stage1"]:
+                    lines.extend([
+                        f"#### {resp['model']}",
+                        "",
+                        resp["response"],
+                        ""
+                    ])
+
+            lines.extend([
+                "### Stage 2: Peer Rankings",
+                ""
+            ])
+
+            if msg.get("stage2"):
+                for ranking in msg["stage2"]:
+                    lines.extend([
+                        f"#### {ranking['model']}",
+                        "",
+                        ranking["ranking"],
+                        ""
+                    ])
+
+            lines.extend([
+                "### Stage 3: Final Synthesis",
+                ""
+            ])
+
+            if msg.get("stage3"):
+                lines.extend([
+                    f"*Chairman: {msg['stage3']['model']}*",
+                    "",
+                    msg["stage3"]["response"],
+                    ""
+                ])
+
+            lines.extend([
+                "---",
+                ""
+            ])
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.environ.get("PORT", 8001))
+    uvicorn.run(app, host="0.0.0.0", port=port)

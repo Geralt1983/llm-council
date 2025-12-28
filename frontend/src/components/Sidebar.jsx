@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -6,13 +6,37 @@ export default function Sidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onDeleteConversation,
+  onExportConversation,
+  onOpenSettings,
 }) {
+  const [menuOpen, setMenuOpen] = useState(null);
+
+  const handleMenuToggle = (e, convId) => {
+    e.stopPropagation();
+    setMenuOpen(menuOpen === convId ? null : convId);
+  };
+
+  const handleDelete = (e, convId) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this conversation?')) {
+      onDeleteConversation(convId);
+    }
+    setMenuOpen(null);
+  };
+
+  const handleExport = (e, convId, format) => {
+    e.stopPropagation();
+    onExportConversation(convId, format);
+    setMenuOpen(null);
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>LLM Council</h1>
         <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
+          + New
         </button>
       </div>
 
@@ -28,15 +52,49 @@ export default function Sidebar({
               }`}
               onClick={() => onSelectConversation(conv.id)}
             >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
+              <div className="conversation-content">
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {conv.message_count} messages
+                </div>
               </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
+              <div className="conversation-actions">
+                <button
+                  className="menu-btn"
+                  onClick={(e) => handleMenuToggle(e, conv.id)}
+                  title="More options"
+                >
+                  ...
+                </button>
+                {menuOpen === conv.id && (
+                  <div className="conversation-menu">
+                    <button onClick={(e) => handleExport(e, conv.id, 'markdown')}>
+                      Export Markdown
+                    </button>
+                    <button onClick={(e) => handleExport(e, conv.id, 'json')}>
+                      Export JSON
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={(e) => handleDelete(e, conv.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))
         )}
+      </div>
+
+      <div className="sidebar-footer">
+        <button className="settings-btn" onClick={onOpenSettings}>
+          <span className="settings-icon">&#9881;</span>
+          Settings
+        </button>
       </div>
     </div>
   );

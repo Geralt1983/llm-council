@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import Settings from './components/Settings';
 import { api } from './api';
 import './App.css';
 
@@ -9,11 +10,19 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState('light');
 
-  // Load conversations on mount
+  // Load theme and conversations on mount
   useEffect(() => {
+    loadTheme();
     loadConversations();
   }, []);
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // Load conversation details when selected
   useEffect(() => {
@@ -21,6 +30,15 @@ function App() {
       loadConversation(currentConversationId);
     }
   }, [currentConversationId]);
+
+  const loadTheme = async () => {
+    try {
+      const config = await api.getCouncilConfig();
+      setTheme(config.theme || 'light');
+    } catch (error) {
+      console.error('Failed to load theme:', error);
+    }
+  };
 
   const loadConversations = async () => {
     try {
@@ -44,7 +62,7 @@ function App() {
     try {
       const newConv = await api.createConversation();
       setConversations([
-        { id: newConv.id, created_at: newConv.created_at, message_count: 0 },
+        { id: newConv.id, created_at: newConv.created_at, title: newConv.title, message_count: 0 },
         ...conversations,
       ]);
       setCurrentConversationId(newConv.id);
@@ -55,6 +73,45 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+  };
+
+  const handleDeleteConversation = async (id) => {
+    try {
+      await api.deleteConversation(id);
+      setConversations(conversations.filter((c) => c.id !== id));
+      if (currentConversationId === id) {
+        setCurrentConversationId(null);
+        setCurrentConversation(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
+  const handleExportConversation = async (id, format = 'markdown') => {
+    try {
+      const content = await api.exportConversation(id, format);
+
+      // Create download
+      const blob = new Blob(
+        [typeof content === 'string' ? content : JSON.stringify(content, null, 2)],
+        { type: format === 'markdown' ? 'text/markdown' : 'application/json' }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `conversation-${id.slice(0, 8)}.${format === 'markdown' ? 'md' : 'json'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export conversation:', error);
+    }
+  };
+
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme);
   };
 
   const handleSendMessage = async (content) => {
@@ -151,8 +208,16 @@ function App() {
             break;
 
           case 'title_complete':
-            // Reload conversations to get updated title
-            loadConversations();
+            // Update conversation title in list
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === currentConversationId ? { ...c, title: event.data.title } : c
+              )
+            );
+            setCurrentConversation((prev) => ({
+              ...prev,
+              title: event.data.title,
+            }));
             break;
 
           case 'complete':
@@ -188,11 +253,22 @@ function App() {
         currentConversationId={currentConversationId}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
+        onExportConversation={handleExportConversation}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
       <ChatInterface
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
+        onExport={(format) =>
+          currentConversationId && handleExportConversation(currentConversationId, format)
+        }
+      />
+      <Settings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onThemeChange={handleThemeChange}
       />
     </div>
   );

@@ -2,7 +2,7 @@
  * API client for the LLM Council backend.
  */
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 export const api = {
   /**
@@ -42,6 +42,20 @@ export const api = {
     );
     if (!response.ok) {
       throw new Error('Failed to get conversation');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a conversation.
+   */
+  async deleteConversation(conversationId) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete conversation');
     }
     return response.json();
   },
@@ -111,5 +125,59 @@ export const api = {
         }
       }
     }
+  },
+
+  /**
+   * Export a conversation to markdown or JSON.
+   */
+  async exportConversation(conversationId, format = 'markdown') {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}/export`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ format }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to export conversation');
+    }
+
+    if (format === 'markdown') {
+      return response.text();
+    }
+    return response.json();
+  },
+
+  // Settings API
+
+  /**
+   * Get the current council configuration.
+   */
+  async getCouncilConfig() {
+    const response = await fetch(`${API_BASE}/api/settings/council`);
+    if (!response.ok) {
+      throw new Error('Failed to get council config');
+    }
+    return response.json();
+  },
+
+  /**
+   * Update the council configuration.
+   */
+  async updateCouncilConfig(config) {
+    const response = await fetch(`${API_BASE}/api/settings/council`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update council config');
+    }
+    return response.json();
   },
 };
