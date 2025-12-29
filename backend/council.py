@@ -12,6 +12,52 @@ from .openrouter import (
 from .config import get_council_models, get_chairman_model
 
 
+# OpenRouter pricing per 1M tokens (approximate, varies by model)
+# Format: model_prefix -> (input_price, output_price) per 1M tokens
+MODEL_PRICING = {
+    'openai/gpt-4o': (2.50, 10.00),
+    'openai/gpt-4': (30.00, 60.00),
+    'openai/gpt-3.5': (0.50, 1.50),
+    'anthropic/claude-3.5': (3.00, 15.00),
+    'anthropic/claude-3': (3.00, 15.00),
+    'anthropic/claude-sonnet': (3.00, 15.00),
+    'google/gemini-2.5': (0.15, 0.60),
+    'google/gemini-2': (0.10, 0.40),
+    'google/gemini-1.5': (0.075, 0.30),
+    'x-ai/grok': (5.00, 15.00),
+    'meta-llama/llama': (0.20, 0.20),
+    'mistralai/': (0.25, 0.25),
+    'default': (1.00, 3.00),  # Fallback pricing
+}
+
+
+def estimate_cost(model: str, metrics: Dict[str, Any]) -> float:
+    """
+    Estimate the cost of an API call based on token usage.
+
+    Args:
+        model: The model identifier
+        metrics: Dict with input_tokens and output_tokens
+
+    Returns:
+        Estimated cost in USD
+    """
+    input_tokens = metrics.get('input_tokens', 0) or 0
+    output_tokens = metrics.get('output_tokens', 0) or 0
+
+    # Find matching pricing
+    input_price, output_price = MODEL_PRICING['default']
+    for prefix, (inp, outp) in MODEL_PRICING.items():
+        if prefix != 'default' and model.startswith(prefix):
+            input_price, output_price = inp, outp
+            break
+
+    # Calculate cost (prices are per 1M tokens)
+    cost = (input_tokens * input_price + output_tokens * output_price) / 1_000_000
+
+    return round(cost, 6)
+
+
 def build_messages_with_history(
     user_query: str,
     conversation_history: Optional[List[Dict[str, str]]] = None
@@ -46,7 +92,7 @@ async def stage1_collect_responses(
     user_query: str,
     conversation_history: Optional[List[Dict[str, str]]] = None,
     use_circuit_breaker: bool = True
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Stage 1: Collect individual responses from all council models.
 
@@ -56,7 +102,7 @@ async def stage1_collect_responses(
         use_circuit_breaker: Whether to use circuit breaker protection
 
     Returns:
-        List of dicts with 'model' and 'response' keys
+        Tuple of (results list, metrics list)
     """
     messages = build_messages_with_history(user_query, conversation_history)
 
@@ -68,23 +114,47 @@ async def stage1_collect_responses(
     else:
         responses = await query_models_parallel(council_models, messages)
 
-    # Format results
+    # Format results and collect metrics
     stage1_results = []
-    for model, response in responses.items():
-        if response is not None:  # Only include successful responses
-            stage1_results.append({
-                "model": model,
-                "response": response.get('content', '')
-            })
+    stage1_metrics = []
 
-    return stage1_results
+    for model, response in responses.items():
+        if response is not None:
+            content = response.get('content')
+            metrics = response.get('metrics', {})
+
+            # Build metrics record
+            metric_record = {
+                'model_id': model,
+                'stage': 'stage1',
+                'response_time_ms': metrics.get('response_time_ms'),
+                'input_tokens': metrics.get('input_tokens'),
+                'output_tokens': metrics.get('output_tokens'),
+                'total_tokens': metrics.get('total_tokens'),
+                'error_type': metrics.get('error_type'),
+            }
+
+            # Calculate estimated cost
+            if metrics.get('total_tokens'):
+                metric_record['cost_usd'] = estimate_cost(model, metrics)
+
+            stage1_metrics.append(metric_record)
+
+            # Only include in results if we got content
+            if content:
+                stage1_results.append({
+                    "model": model,
+                    "response": content
+                })
+
+    return stage1_results, stage1_metrics
 
 
 async def stage2_collect_rankings(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
     use_circuit_breaker: bool = True
-) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+) -> Tuple[List[Dict[str, Any]], Dict[str, str], List[Dict[str, Any]]]:
     """
     Stage 2: Each model ranks the anonymized responses.
 
@@ -94,7 +164,7 @@ async def stage2_collect_rankings(
         use_circuit_breaker: Whether to use circuit breaker protection
 
     Returns:
-        Tuple of (rankings list, label_to_model mapping)
+        Tuple of (rankings list, label_to_model mapping, metrics list)
     """
     # Create anonymized labels for responses (Response A, Response B, etc.)
     labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
@@ -152,19 +222,40 @@ Now provide your evaluation and ranking:"""
     else:
         responses = await query_models_parallel(council_models, messages)
 
-    # Format results
+    # Format results and collect metrics
     stage2_results = []
+    stage2_metrics = []
+
     for model, response in responses.items():
         if response is not None:
             full_text = response.get('content', '')
-            parsed = parse_ranking_from_text(full_text)
-            stage2_results.append({
-                "model": model,
-                "ranking": full_text,
-                "parsed_ranking": parsed
-            })
+            metrics = response.get('metrics', {})
 
-    return stage2_results, label_to_model
+            # Build metrics record
+            metric_record = {
+                'model_id': model,
+                'stage': 'stage2',
+                'response_time_ms': metrics.get('response_time_ms'),
+                'input_tokens': metrics.get('input_tokens'),
+                'output_tokens': metrics.get('output_tokens'),
+                'total_tokens': metrics.get('total_tokens'),
+                'error_type': metrics.get('error_type'),
+            }
+
+            if metrics.get('total_tokens'):
+                metric_record['cost_usd'] = estimate_cost(model, metrics)
+
+            stage2_metrics.append(metric_record)
+
+            if full_text:
+                parsed = parse_ranking_from_text(full_text)
+                stage2_results.append({
+                    "model": model,
+                    "ranking": full_text,
+                    "parsed_ranking": parsed
+                })
+
+    return stage2_results, label_to_model, stage2_metrics
 
 
 def build_chairman_prompt(
@@ -206,7 +297,7 @@ async def stage3_synthesize_final(
     stage1_results: List[Dict[str, Any]],
     stage2_results: List[Dict[str, Any]],
     use_circuit_breaker: bool = True
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Stage 3: Chairman synthesizes final response.
 
@@ -217,7 +308,7 @@ async def stage3_synthesize_final(
         use_circuit_breaker: Whether to use circuit breaker protection
 
     Returns:
-        Dict with 'model' and 'response' keys
+        Tuple of (result dict, metrics dict)
     """
     chairman_prompt = build_chairman_prompt(user_query, stage1_results, stage2_results)
     messages = [{"role": "user", "content": chairman_prompt}]
@@ -230,17 +321,32 @@ async def stage3_synthesize_final(
     else:
         response = await query_model(chairman_model, messages)
 
-    if response is None:
+    # Build metrics
+    metrics = response.get('metrics', {}) if response else {}
+    stage3_metrics = {
+        'model_id': chairman_model,
+        'stage': 'stage3',
+        'response_time_ms': metrics.get('response_time_ms'),
+        'input_tokens': metrics.get('input_tokens'),
+        'output_tokens': metrics.get('output_tokens'),
+        'total_tokens': metrics.get('total_tokens'),
+        'error_type': metrics.get('error_type'),
+    }
+
+    if metrics.get('total_tokens'):
+        stage3_metrics['cost_usd'] = estimate_cost(chairman_model, metrics)
+
+    if response is None or not response.get('content'):
         # Fallback if chairman fails
         return {
             "model": chairman_model,
             "response": "Error: Unable to generate final synthesis."
-        }
+        }, stage3_metrics
 
     return {
         "model": chairman_model,
         "response": response.get('content', '')
-    }
+    }, stage3_metrics
 
 
 async def stage3_synthesize_streaming(
@@ -401,7 +507,7 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict, List]:
     """
     Run the complete 3-stage council process.
 
@@ -409,30 +515,41 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
         user_query: The user's question
 
     Returns:
-        Tuple of (stage1_results, stage2_results, stage3_result, metadata)
+        Tuple of (stage1_results, stage2_results, stage3_result, metadata, all_metrics)
     """
+    all_metrics = []
+
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query)
+    stage1_results, stage1_metrics = await stage1_collect_responses(user_query)
+    all_metrics.extend(stage1_metrics)
 
     # If no models responded successfully, return error
     if not stage1_results:
         return [], [], {
             "model": "error",
             "response": "All models failed to respond. Please try again."
-        }, {}
+        }, {}, all_metrics
 
     # Stage 2: Collect rankings
-    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
+    stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(user_query, stage1_results)
+    all_metrics.extend(stage2_metrics)
 
-    # Calculate aggregate rankings
+    # Calculate aggregate rankings and add ranking positions to metrics
     aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
 
+    # Add ranking positions to stage1 metrics
+    for ranking in aggregate_rankings:
+        for metric in all_metrics:
+            if metric['model_id'] == ranking['model'] and metric['stage'] == 'stage1':
+                metric['ranking_position'] = ranking['average_rank']
+
     # Stage 3: Synthesize final answer
-    stage3_result = await stage3_synthesize_final(
+    stage3_result, stage3_metrics = await stage3_synthesize_final(
         user_query,
         stage1_results,
         stage2_results
     )
+    all_metrics.append(stage3_metrics)
 
     # Prepare metadata
     metadata = {
@@ -440,4 +557,4 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
         "aggregate_rankings": aggregate_rankings
     }
 
-    return stage1_results, stage2_results, stage3_result, metadata
+    return stage1_results, stage2_results, stage3_result, metadata, all_metrics

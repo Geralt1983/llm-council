@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
+import Analytics from './components/Analytics';
 import { api } from './api';
 import './App.css';
 
@@ -11,6 +12,7 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [theme, setTheme] = useState('light');
 
   // Load theme and conversations on mount
@@ -262,6 +264,7 @@ function App() {
         onDeleteConversation={handleDeleteConversation}
         onExportConversation={handleExportConversation}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenAnalytics={() => setIsAnalyticsOpen(true)}
       />
       <ChatInterface
         conversation={currentConversation}
@@ -275,6 +278,10 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onThemeChange={handleThemeChange}
+      />
+      <Analytics
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
       />
     </div>
   );

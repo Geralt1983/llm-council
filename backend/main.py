@@ -165,7 +165,7 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         storage.update_conversation_title(conversation_id, title)
 
     # Run the 3-stage council process
-    stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+    stage1_results, stage2_results, stage3_result, metadata, all_metrics = await run_full_council(
         request.content
     )
 
@@ -177,6 +177,11 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         stage3_result,
         metadata
     )
+
+    # Save metrics
+    message_id = storage.get_last_message_id(conversation_id)
+    if message_id and all_metrics:
+        storage.save_model_metrics(message_id, all_metrics)
 
     # Return the complete response with metadata
     return {
@@ -230,6 +235,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
     async def event_generator():
         try:
+            all_metrics = []
+
             # Add user message
             storage.add_user_message(conversation_id, request.content)
 
@@ -240,21 +247,31 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 1: Collect responses (with conversation history)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(
+            stage1_results, stage1_metrics = await stage1_collect_responses(
                 request.content,
                 conversation_history=conversation_history
             )
+            all_metrics.extend(stage1_metrics)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(request.content, stage1_results)
+            all_metrics.extend(stage2_metrics)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+
+            # Add ranking positions to stage1 metrics
+            for ranking in aggregate_rankings:
+                for metric in all_metrics:
+                    if metric['model_id'] == ranking['model'] and metric.get('stage') == 'stage1':
+                        metric['ranking_position'] = ranking['average_rank']
+
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result, stage3_metrics = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            all_metrics.append(stage3_metrics)
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started
@@ -275,6 +292,11 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 stage3_result,
                 metadata
             )
+
+            # Save metrics
+            message_id = storage.get_last_message_id(conversation_id)
+            if message_id and all_metrics:
+                storage.save_model_metrics(message_id, all_metrics)
 
             # Send completion event
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
@@ -309,6 +331,7 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
 
     async def event_generator():
         try:
+            all_metrics = []
             storage.add_user_message(conversation_id, request.content)
 
             title_task = None
@@ -317,16 +340,25 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
 
             # Stage 1
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(
+            stage1_results, stage1_metrics = await stage1_collect_responses(
                 request.content,
                 conversation_history=conversation_history
             )
+            all_metrics.extend(stage1_metrics)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(request.content, stage1_results)
+            all_metrics.extend(stage2_metrics)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+
+            # Add ranking positions to stage1 metrics
+            for ranking in aggregate_rankings:
+                for metric in all_metrics:
+                    if metric['model_id'] == ranking['model'] and metric.get('stage') == 'stage1':
+                        metric['ranking_position'] = ranking['average_rank']
+
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3 with token streaming
@@ -373,6 +405,17 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
                 stage3_result,
                 metadata
             )
+
+            # Save metrics (stage3 metrics from streaming are minimal)
+            stage3_metrics = {
+                'model_id': chairman_model,
+                'stage': 'stage3',
+            }
+            all_metrics.append(stage3_metrics)
+
+            message_id = storage.get_last_message_id(conversation_id)
+            if message_id and all_metrics:
+                storage.save_model_metrics(message_id, all_metrics)
 
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
@@ -529,6 +572,26 @@ def generate_markdown_export(conversation: Dict[str, Any]) -> str:
             ])
 
     return "\n".join(lines)
+
+
+# Analytics Endpoints
+
+@app.get("/api/analytics/summary")
+async def get_analytics_summary():
+    """Get aggregate analytics summary across all conversations."""
+    return storage.get_analytics_summary()
+
+
+@app.get("/api/analytics/models/{model_id:path}")
+async def get_model_analytics(model_id: str):
+    """Get detailed analytics for a specific model."""
+    return storage.get_model_analytics(model_id)
+
+
+@app.get("/api/analytics/recent")
+async def get_recent_metrics(limit: int = 100):
+    """Get recent metrics for timeline display."""
+    return storage.get_recent_metrics(limit)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ export default function Sidebar({
   onDeleteConversation,
   onExportConversation,
   onOpenSettings,
+  onOpenAnalytics,
 }) {
   const [menuOpen, setMenuOpen] = useState(null);
 
@@ -91,8 +92,12 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <button className="settings-btn" onClick={onOpenSettings}>
-          <span className="settings-icon">&#9881;</span>
+        <button className="footer-btn" onClick={onOpenAnalytics}>
+          <span className="footer-icon">&#128202;</span>
+          Analytics
+        </button>
+        <button className="footer-btn" onClick={onOpenSettings}>
+          <span className="footer-icon">&#9881;</span>
           Settings
         </button>
       </div>

@@ -238,4 +238,41 @@ export const api = {
     }
     return response.json();
   },
+
+  // Analytics API
+
+  /**
+   * Get analytics summary across all conversations.
+   */
+  async getAnalyticsSummary() {
+    const response = await fetch(`${API_BASE}/api/analytics/summary`);
+    if (!response.ok) {
+      throw new Error('Failed to get analytics summary');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get detailed analytics for a specific model.
+   */
+  async getModelAnalytics(modelId) {
+    const response = await fetch(
+      `${API_BASE}/api/analytics/models/${encodeURIComponent(modelId)}`
+    );
+    if (!response.ok) {
+      throw new Error('Failed to get model analytics');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get recent metrics for timeline display.
+   */
+  async getRecentMetrics(limit = 100) {
+    const response = await fetch(`${API_BASE}/api/analytics/recent?limit=${limit}`);
+    if (!response.ok) {
+      throw new Error('Failed to get recent metrics');
+    }
+    return response.json();
+  },
 };
