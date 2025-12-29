@@ -14,12 +14,14 @@ function deAnonymizeText(text, labelToModel) {
   return result;
 }
 
-export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
+export default function Stage2({ rankings, labelToModel, aggregateRankings, dissent }) {
   const [activeTab, setActiveTab] = useState(0);
 
   if (!rankings || rankings.length === 0) {
     return null;
   }
+
+  const getShortModelName = (model) => model.split('/')[1] || model;
 
   return (
     <div className="stage stage2">
@@ -91,6 +93,64 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {dissent && (
+        <div className="dissent-metrics">
+          <h4>Consensus Analysis</h4>
+          <div className="dissent-content">
+            <div className="agreement-score">
+              <span className="dissent-label">Agreement Score:</span>
+              <span className={`dissent-value ${dissent.agreement_score >= 0.7 ? 'high' : dissent.agreement_score >= 0.4 ? 'medium' : 'low'}`}>
+                {(dissent.agreement_score * 100).toFixed(0)}%
+              </span>
+              <span className="dissent-hint">
+                {dissent.agreement_score >= 0.7 ? '(Strong consensus)' :
+                 dissent.agreement_score >= 0.4 ? '(Moderate agreement)' :
+                 '(Significant disagreement)'}
+              </span>
+            </div>
+
+            {dissent.unanimous_winner && (
+              <div className="unanimous-winner">
+                <span className="dissent-label">Unanimous Winner:</span>
+                <span className="dissent-value winner">
+                  {getShortModelName(dissent.unanimous_winner)}
+                </span>
+              </div>
+            )}
+
+            {dissent.controversies && dissent.controversies.length > 0 && (
+              <div className="controversies">
+                <span className="dissent-label">Controversial Responses:</span>
+                <div className="controversy-list">
+                  {dissent.controversies.map((model, index) => (
+                    <span key={index} className="controversy-item">
+                      {getShortModelName(model)}
+                    </span>
+                  ))}
+                </div>
+                <span className="dissent-hint">
+                  (Received both first and last place votes)
+                </span>
+              </div>
+            )}
+
+            {dissent.ranking_spread && Object.keys(dissent.ranking_spread).length > 0 && (
+              <div className="ranking-spread">
+                <span className="dissent-label">Ranking Spread:</span>
+                <div className="spread-list">
+                  {Object.entries(dissent.ranking_spread).map(([model, spread]) => (
+                    <div key={model} className="spread-item">
+                      <span className="spread-model">{getShortModelName(model)}</span>
+                      <span className="spread-value">±{spread.toFixed(1)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

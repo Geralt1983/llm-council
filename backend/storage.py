@@ -231,7 +231,11 @@ def get_council_config() -> Dict[str, Any]:
 def update_council_config(
     council_models: Optional[List[str]] = None,
     chairman_model: Optional[str] = None,
-    theme: Optional[str] = None
+    theme: Optional[str] = None,
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None,
+    model_weights: Optional[Dict[str, float]] = None,
+    enable_confidence: Optional[bool] = None,
+    enable_dissent_tracking: Optional[bool] = None
 ) -> Dict[str, Any]:
     """
     Update the council configuration.
@@ -240,6 +244,10 @@ def update_council_config(
         council_models: List of model identifiers for the council
         chairman_model: Model identifier for the chairman
         theme: UI theme ('light' or 'dark')
+        ranking_criteria: List of ranking criteria with weights
+        model_weights: Dict mapping model_id to voting weight
+        enable_confidence: Whether to request confidence scores
+        enable_dissent_tracking: Whether to track disagreements
 
     Returns:
         Updated configuration dict
@@ -252,6 +260,14 @@ def update_council_config(
         config["chairman_model"] = chairman_model
     if theme is not None:
         config["theme"] = theme
+    if ranking_criteria is not None:
+        config["ranking_criteria"] = ranking_criteria
+    if model_weights is not None:
+        config["model_weights"] = model_weights
+    if enable_confidence is not None:
+        config["enable_confidence"] = enable_confidence
+    if enable_dissent_tracking is not None:
+        config["enable_dissent_tracking"] = enable_dissent_tracking
 
     set_settings("council_config", config)
     return config

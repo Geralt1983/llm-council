@@ -220,3 +220,179 @@
 [data-theme="dark"] .parsed-ranking ol {
   color: var(--text-primary);
 }
+
+/* Dissent Metrics */
+.dissent-metrics {
+  background: #fff8e6;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 20px;
+  border: 2px solid #f0d090;
+}
+
+.dissent-metrics h4 {
+  margin: 0 0 12px 0;
+  color: #b07800;
+  font-size: 15px;
+}
+
+.dissent-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agreement-score,
+.unanimous-winner,
+.controversies,
+.ranking-spread {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dissent-label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.dissent-value {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dissent-value.high {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.dissent-value.medium {
+  background: #fef9c3;
+  color: #a16207;
+}
+
+.dissent-value.low {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.dissent-value.winner {
+  background: #dcfce7;
+  color: #16a34a;
+  font-family: monospace;
+}
+
+.dissent-hint {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
+.controversy-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.controversy-item {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 13px;
+  font-family: monospace;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.ranking-spread {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.spread-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.spread-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-primary, #ffffff);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #f0d090;
+}
+
+.spread-model {
+  font-family: monospace;
+  font-size: 12px;
+  color: #666;
+}
+
+.spread-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b07800;
+}
+
+/* Dark mode - Dissent Metrics */
+[data-theme="dark"] .dissent-metrics {
+  background: #3d3010;
+  border-color: #5a4820;
+}
+
+[data-theme="dark"] .dissent-metrics h4 {
+  color: #f0c060;
+}
+
+[data-theme="dark"] .dissent-label {
+  color: #aaa;
+}
+
+[data-theme="dark"] .dissent-value.high {
+  background: #1a4d2e;
+  color: #4ade80;
+}
+
+[data-theme="dark"] .dissent-value.medium {
+  background: #4d4020;
+  color: #f0c060;
+}
+
+[data-theme="dark"] .dissent-value.low {
+  background: #4d1a1a;
+  color: #f87171;
+}
+
+[data-theme="dark"] .dissent-value.winner {
+  background: #1a4d2e;
+  color: #4ade80;
+}
+
+[data-theme="dark"] .dissent-hint {
+  color: #888;
+}
+
+[data-theme="dark"] .controversy-item {
+  background: #4d1a1a;
+  color: #f87171;
+}
+
+[data-theme="dark"] .spread-item {
+  background: var(--bg-secondary);
+  border-color: #5a4820;
+}
+
+[data-theme="dark"] .spread-model {
+  color: #aaa;
+}
+
+[data-theme="dark"] .spread-value {
+  color: #f0c060;
+}

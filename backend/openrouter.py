@@ -3,8 +3,88 @@
 import httpx
 import json
 import time
+import re
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
+
+
+# Patterns to identify reasoning models
+REASONING_MODEL_PATTERNS = [
+    r'openai/o1',
+    r'openai/o3',
+    r'o1-preview',
+    r'o1-mini',
+    r'o3-mini',
+    r'reasoning',
+    r'thinking',
+    r'deepseek.*reasoner',
+]
+
+
+def is_reasoning_model(model: str) -> bool:
+    """
+    Check if a model is a reasoning model that requires special handling.
+
+    Reasoning models (o1, o3, etc.) have different API requirements:
+    - No system messages (must be converted to user messages)
+    - Different temperature handling
+    - May return reasoning_content in addition to content
+    """
+    model_lower = model.lower()
+    return any(re.search(pattern, model_lower) for pattern in REASONING_MODEL_PATTERNS)
+
+
+def prepare_messages_for_model(
+    model: str,
+    messages: List[Dict[str, str]]
+) -> List[Dict[str, str]]:
+    """
+    Prepare messages for a specific model, handling reasoning model requirements.
+
+    For reasoning models:
+    - Convert system messages to user messages (prepended with context)
+    - Merge consecutive user messages
+    """
+    if not is_reasoning_model(model):
+        return messages
+
+    # Convert system messages to user messages for reasoning models
+    converted = []
+    for msg in messages:
+        if msg['role'] == 'system':
+            # Convert system message to user message with clear labeling
+            converted.append({
+                'role': 'user',
+                'content': f"[System Context]\n{msg['content']}"
+            })
+        else:
+            converted.append(msg.copy())
+
+    # Merge consecutive user messages (reasoning models may require alternating roles)
+    merged = []
+    for msg in converted:
+        if merged and merged[-1]['role'] == msg['role'] == 'user':
+            merged[-1]['content'] += '\n\n' + msg['content']
+        else:
+            merged.append(msg)
+
+    return merged
+
+
+def get_model_parameters(model: str) -> Dict[str, Any]:
+    """
+    Get model-specific parameters for the API request.
+
+    Returns parameters dict to merge with the payload.
+    """
+    params = {}
+
+    if is_reasoning_model(model):
+        # Reasoning models don't support temperature
+        # Some may support reasoning_effort
+        params['reasoning_effort'] = 'high'
+
+    return params
 
 
 async def query_model(
@@ -28,11 +108,20 @@ async def query_model(
         "Content-Type": "application/json",
     }
 
+    # Prepare messages for this specific model (handles reasoning models)
+    prepared_messages = prepare_messages_for_model(model, messages)
+
+    # Build payload with model-specific parameters
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": prepared_messages,
     }
 
+    # Add model-specific parameters (e.g., reasoning_effort for o1/o3)
+    model_params = get_model_parameters(model)
+    payload.update(model_params)
+
+    is_reasoning = is_reasoning_model(model)
     start_time = time.time()
 
     try:
@@ -51,9 +140,11 @@ async def query_model(
             # Extract usage data if available
             usage = data.get('usage', {})
 
-            return {
+            # Build response with reasoning model support
+            result = {
                 'content': message.get('content'),
                 'reasoning_details': message.get('reasoning_details'),
+                'is_reasoning_model': is_reasoning,
                 'metrics': {
                     'response_time_ms': elapsed_ms,
                     'input_tokens': usage.get('prompt_tokens'),
@@ -62,12 +153,20 @@ async def query_model(
                 }
             }
 
+            # For reasoning models, also capture reasoning_content if available
+            if is_reasoning:
+                result['reasoning_content'] = message.get('reasoning_content')
+                result['reasoning_tokens'] = usage.get('reasoning_tokens')
+
+            return result
+
     except Exception as e:
         elapsed_ms = int((time.time() - start_time) * 1000)
         print(f"Error querying model {model}: {e}")
         return {
             'content': None,
             'error': str(e),
+            'is_reasoning_model': is_reasoning,
             'metrics': {
                 'response_time_ms': elapsed_ms,
                 'error_type': type(e).__name__,
@@ -115,18 +214,27 @@ async def stream_model(
         timeout: Request timeout in seconds
 
     Yields:
-        Dict with 'type' (token, done, error) and 'content'
+        Dict with 'type' (token, reasoning, done, error) and 'content'
     """
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
 
+    # Prepare messages for this specific model (handles reasoning models)
+    prepared_messages = prepare_messages_for_model(model, messages)
+
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": prepared_messages,
         "stream": True,
     }
+
+    # Add model-specific parameters
+    model_params = get_model_parameters(model)
+    payload.update(model_params)
+
+    is_reasoning = is_reasoning_model(model)
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -139,22 +247,39 @@ async def stream_model(
                 response.raise_for_status()
 
                 full_content = ""
+                full_reasoning = ""
                 async for line in response.aiter_lines():
                     if not line or not line.startswith("data: "):
                         continue
 
                     data = line[6:]  # Remove "data: " prefix
                     if data == "[DONE]":
-                        yield {"type": "done", "content": full_content}
+                        result = {
+                            "type": "done",
+                            "content": full_content,
+                            "is_reasoning_model": is_reasoning
+                        }
+                        if is_reasoning and full_reasoning:
+                            result["reasoning_content"] = full_reasoning
+                        yield result
                         return
 
                     try:
                         chunk = json.loads(data)
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
+
+                        # Handle regular content
                         content = delta.get("content", "")
                         if content:
                             full_content += content
                             yield {"type": "token", "content": content}
+
+                        # Handle reasoning content for reasoning models
+                        if is_reasoning:
+                            reasoning = delta.get("reasoning_content", "")
+                            if reasoning:
+                                full_reasoning += reasoning
+                                yield {"type": "reasoning", "content": reasoning}
                     except json.JSONDecodeError:
                         continue
 

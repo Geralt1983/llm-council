@@ -52,25 +52,21 @@ A multi-LLM deliberation platform where AI models collaborate through anonymized
 - [x] Frontend analytics dashboard with model performance table
 - [x] Ranking position tracking and aggregation
 
+### Phase 4: Advanced Deliberation
+**Status:** ✅ Complete
+
+- [x] Custom ranking criteria (user-defined evaluation dimensions)
+- [x] Weighted voting (configurable model influence)
+- [x] Reasoning model support (o1, o3, thinking models with special handling)
+- [x] Dissent tracking (agreement scores, controversies, ranking spread)
+- [x] Confidence scores (models self-rate, visual bar chart summary)
+
 ---
 
 ## Upcoming Phases
 
-### Phase 4: Advanced Deliberation
-**Status:** 🔜 Next
-
-**Goal:** Enhance the deliberation process with more sophisticated interactions.
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Custom ranking criteria | User-defined evaluation dimensions | High |
-| Weighted voting | Give certain models more influence | Medium |
-| Reasoning model support | Special handling for o1, o3 models | Medium |
-| Dissent tracking | Highlight disagreements between models | Low |
-| Confidence scores | Models rate their own confidence | Low |
-
 ### Phase 5: Model Management
-**Status:** 📋 Planned
+**Status:** 🔜 Next
 
 **Goal:** Better control over model selection and behavior.
 
@@ -154,3 +150,4 @@ See commit history for detailed changes. Major milestones:
 - **Phase 1** - Production deployment with settings and themes
 - **Phase 2** - Streaming, multi-turn context, circuit breaker
 - **Phase 3** - Analytics dashboard with timing, tokens, cost tracking
+- **Phase 4** - Advanced deliberation: custom criteria, weighted voting, dissent tracking, reasoning models, confidence scores

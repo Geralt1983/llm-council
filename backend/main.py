@@ -18,7 +18,8 @@ from .council import (
     stage2_collect_rankings,
     stage3_synthesize_final,
     stage3_synthesize_streaming,
-    calculate_aggregate_rankings
+    calculate_aggregate_rankings,
+    calculate_dissent_metrics
 )
 from .openrouter import CircuitBreaker
 from .db.session import init_db, migrate_from_json
@@ -81,11 +82,25 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
+class RankingCriterion(BaseModel):
+    """A single ranking criterion for Stage 2 evaluation."""
+    id: str
+    name: str
+    description: str = ""
+    weight: float = 1.0
+    enabled: bool = True
+
+
 class CouncilConfigRequest(BaseModel):
     """Request to update council configuration."""
     council_models: Optional[List[str]] = None
     chairman_model: Optional[str] = None
     theme: Optional[str] = None
+    # Phase 4: Advanced Deliberation
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None
+    model_weights: Optional[Dict[str, float]] = None
+    enable_confidence: Optional[bool] = None
+    enable_dissent_tracking: Optional[bool] = None
 
 
 class CouncilConfigResponse(BaseModel):
@@ -93,6 +108,11 @@ class CouncilConfigResponse(BaseModel):
     council_models: List[str]
     chairman_model: str
     theme: str
+    # Phase 4: Advanced Deliberation
+    ranking_criteria: List[Dict[str, Any]] = []
+    model_weights: Dict[str, float] = {}
+    enable_confidence: bool = False
+    enable_dissent_tracking: bool = True
 
 
 class ExportRequest(BaseModel):
@@ -164,9 +184,16 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         title = await generate_conversation_title(request.content)
         storage.update_conversation_title(conversation_id, title)
 
-    # Run the 3-stage council process
+    # Load council config for Phase 4 features
+    config = storage.get_council_config()
+
+    # Run the 3-stage council process with Phase 4 settings
     stage1_results, stage2_results, stage3_result, metadata, all_metrics = await run_full_council(
-        request.content
+        request.content,
+        ranking_criteria=config.get("ranking_criteria"),
+        model_weights=config.get("model_weights"),
+        enable_dissent_tracking=config.get("enable_dissent_tracking", True),
+        enable_confidence=config.get("enable_confidence", False)
     )
 
     # Add assistant message with all stages
@@ -233,6 +260,13 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     # Get conversation history for multi-turn context
     conversation_history = get_conversation_history(conversation)
 
+    # Load council config for Phase 4 features
+    config = storage.get_council_config()
+    ranking_criteria = config.get("ranking_criteria")
+    model_weights = config.get("model_weights")
+    enable_dissent_tracking = config.get("enable_dissent_tracking", True)
+    enable_confidence = config.get("enable_confidence", False)
+
     async def event_generator():
         try:
             all_metrics = []
@@ -249,16 +283,27 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results, stage1_metrics = await stage1_collect_responses(
                 request.content,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                enable_confidence=enable_confidence
             )
             all_metrics.extend(stage1_metrics)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
-            # Stage 2: Collect rankings
+            # Stage 2: Collect rankings with Phase 4 custom criteria
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(
+                request.content,
+                stage1_results,
+                ranking_criteria=ranking_criteria
+            )
             all_metrics.extend(stage2_metrics)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+
+            # Calculate aggregate rankings with Phase 4 weighted voting
+            aggregate_rankings = calculate_aggregate_rankings(
+                stage2_results,
+                label_to_model,
+                model_weights=model_weights
+            )
 
             # Add ranking positions to stage1 metrics
             for ranking in aggregate_rankings:
@@ -266,7 +311,17 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                     if metric['model_id'] == ranking['model'] and metric.get('stage') == 'stage1':
                         metric['ranking_position'] = ranking['average_rank']
 
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            # Build metadata with optional dissent tracking
+            stage2_metadata = {
+                'label_to_model': label_to_model,
+                'aggregate_rankings': aggregate_rankings
+            }
+
+            if enable_dissent_tracking and len(stage2_results) >= 2:
+                dissent_metrics = calculate_dissent_metrics(stage2_results, label_to_model)
+                stage2_metadata['dissent'] = dissent_metrics
+
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': stage2_metadata})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
@@ -285,6 +340,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 "label_to_model": label_to_model,
                 "aggregate_rankings": aggregate_rankings
             }
+            if enable_dissent_tracking and len(stage2_results) >= 2:
+                metadata["dissent"] = stage2_metadata.get("dissent")
+
             storage.add_assistant_message(
                 conversation_id,
                 stage1_results,
@@ -329,6 +387,13 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
     is_first_message = len(conversation["messages"]) == 0
     conversation_history = get_conversation_history(conversation)
 
+    # Load council config for Phase 4 features
+    config = storage.get_council_config()
+    ranking_criteria = config.get("ranking_criteria")
+    model_weights = config.get("model_weights")
+    enable_dissent_tracking = config.get("enable_dissent_tracking", True)
+    enable_confidence = config.get("enable_confidence", False)
+
     async def event_generator():
         try:
             all_metrics = []
@@ -342,16 +407,27 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results, stage1_metrics = await stage1_collect_responses(
                 request.content,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                enable_confidence=enable_confidence
             )
             all_metrics.extend(stage1_metrics)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
-            # Stage 2
+            # Stage 2 with Phase 4 custom criteria
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model, stage2_metrics = await stage2_collect_rankings(
+                request.content,
+                stage1_results,
+                ranking_criteria=ranking_criteria
+            )
             all_metrics.extend(stage2_metrics)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+
+            # Calculate aggregate rankings with Phase 4 weighted voting
+            aggregate_rankings = calculate_aggregate_rankings(
+                stage2_results,
+                label_to_model,
+                model_weights=model_weights
+            )
 
             # Add ranking positions to stage1 metrics
             for ranking in aggregate_rankings:
@@ -359,7 +435,17 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
                     if metric['model_id'] == ranking['model'] and metric.get('stage') == 'stage1':
                         metric['ranking_position'] = ranking['average_rank']
 
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            # Build metadata with optional dissent tracking
+            stage2_metadata = {
+                'label_to_model': label_to_model,
+                'aggregate_rankings': aggregate_rankings
+            }
+
+            if enable_dissent_tracking and len(stage2_results) >= 2:
+                dissent_metrics = calculate_dissent_metrics(stage2_results, label_to_model)
+                stage2_metadata['dissent'] = dissent_metrics
+
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': stage2_metadata})}\n\n"
 
             # Stage 3 with token streaming
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
@@ -393,11 +479,14 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
                 storage.update_conversation_title(conversation_id, title)
                 yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
 
-            # Save message
+            # Save message with Phase 4 metadata
             metadata = {
                 "label_to_model": label_to_model,
                 "aggregate_rankings": aggregate_rankings
             }
+            if enable_dissent_tracking and len(stage2_results) >= 2:
+                metadata["dissent"] = stage2_metadata.get("dissent")
+
             storage.add_assistant_message(
                 conversation_id,
                 stage1_results,
@@ -455,7 +544,11 @@ async def get_council_config():
     return CouncilConfigResponse(
         council_models=config.get("council_models", []),
         chairman_model=config.get("chairman_model", ""),
-        theme=config.get("theme", "light")
+        theme=config.get("theme", "light"),
+        ranking_criteria=config.get("ranking_criteria", []),
+        model_weights=config.get("model_weights", {}),
+        enable_confidence=config.get("enable_confidence", False),
+        enable_dissent_tracking=config.get("enable_dissent_tracking", True)
     )
 
 
@@ -465,12 +558,20 @@ async def update_council_config(request: CouncilConfigRequest):
     config = storage.update_council_config(
         council_models=request.council_models,
         chairman_model=request.chairman_model,
-        theme=request.theme
+        theme=request.theme,
+        ranking_criteria=request.ranking_criteria,
+        model_weights=request.model_weights,
+        enable_confidence=request.enable_confidence,
+        enable_dissent_tracking=request.enable_dissent_tracking
     )
     return CouncilConfigResponse(
         council_models=config.get("council_models", []),
         chairman_model=config.get("chairman_model", ""),
-        theme=config.get("theme", "light")
+        theme=config.get("theme", "light"),
+        ranking_criteria=config.get("ranking_criteria", []),
+        model_weights=config.get("model_weights", {}),
+        enable_confidence=config.get("enable_confidence", False),
+        enable_dissent_tracking=config.get("enable_dissent_tracking", True)
     )
 
 

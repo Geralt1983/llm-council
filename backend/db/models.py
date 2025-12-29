@@ -128,4 +128,13 @@ class Settings(Base):
             ],
             "chairman_model": "google/gemini-2.5-flash",
             "theme": "light",
+            # Phase 4: Advanced Deliberation
+            "ranking_criteria": [
+                {"id": "accuracy", "name": "Accuracy", "description": "Factual correctness and precision", "weight": 1.0, "enabled": True},
+                {"id": "completeness", "name": "Completeness", "description": "Thoroughness and coverage of the topic", "weight": 1.0, "enabled": True},
+                {"id": "clarity", "name": "Clarity", "description": "Clear and easy to understand", "weight": 1.0, "enabled": True},
+            ],
+            "model_weights": {},  # model_id -> weight (1.0 default)
+            "enable_confidence": False,  # Ask models for confidence scores
+            "enable_dissent_tracking": True,  # Track disagreements
         }

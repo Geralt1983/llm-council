@@ -93,6 +93,7 @@ export default function ChatInterface({
                       rankings={msg.stage2}
                       labelToModel={msg.metadata?.label_to_model}
                       aggregateRankings={msg.metadata?.aggregate_rankings}
+                      dissent={msg.metadata?.dissent}
                     />
                   )}
 
