@@ -722,7 +722,7 @@ Title:"""
     # Use gemini-2.5-flash for title generation (fast and cheap)
     response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
 
-    if response is None:
+    if response is None or response.get('content') is None:
         # Fallback to a generic title
         return "New Conversation"
 
