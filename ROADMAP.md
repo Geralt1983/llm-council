@@ -42,30 +42,22 @@ A multi-LLM deliberation platform where AI models collaborate through anonymized
 - [x] Testing infrastructure (pytest with mocks)
 - [x] React state management fixes (spinner, follow-ups)
 
+### Phase 3: Analytics & Insights
+**Status:** ✅ Complete
+
+- [x] Response timing per model per stage
+- [x] Token usage tracking (input/output/total)
+- [x] Cost estimation based on model pricing
+- [x] Analytics API endpoints (`/api/analytics/*`)
+- [x] Frontend analytics dashboard with model performance table
+- [x] Ranking position tracking and aggregation
+
 ---
 
 ## Upcoming Phases
 
-### Phase 3: Analytics & Insights
-**Status:** 🔜 Next
-
-**Goal:** Understand model performance and council dynamics over time.
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Response timing | Track latency per model per stage | High |
-| Token usage | Count tokens consumed per query | High |
-| Ranking analytics | Visualize which models rank highest | Medium |
-| Cost estimation | Estimate API costs per conversation | Medium |
-| Performance dashboard | Aggregate stats over time | Low |
-
-**Technical Notes:**
-- Store metrics in SQLite alongside conversations
-- Add `/api/analytics` endpoints
-- Frontend dashboard component with charts
-
 ### Phase 4: Advanced Deliberation
-**Status:** 📋 Planned
+**Status:** 🔜 Next
 
 **Goal:** Enhance the deliberation process with more sophisticated interactions.
 
@@ -161,3 +153,4 @@ See commit history for detailed changes. Major milestones:
 - **v0** - Initial 3-stage deliberation system
 - **Phase 1** - Production deployment with settings and themes
 - **Phase 2** - Streaming, multi-turn context, circuit breaker
+- **Phase 3** - Analytics dashboard with timing, tokens, cost tracking
