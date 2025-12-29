@@ -77,12 +77,16 @@ class Message(Base):
                 "content": self.content
             }
         else:
-            return {
+            result = {
                 "role": "assistant",
                 "stage1": self.stage1,
                 "stage2": self.stage2,
                 "stage3": self.stage3
             }
+            # Include metadata if present (label_to_model, aggregate_rankings, dissent, etc.)
+            if self.metadata_json:
+                result["metadata"] = self.metadata_json
+            return result
 
 
 class ModelMetric(Base):
