@@ -180,4 +180,62 @@ export const api = {
     }
     return response.json();
   },
+
+  /**
+   * Send a message with token-by-token streaming for Stage 3.
+   * @param {string} conversationId - The conversation ID
+   * @param {string} content - The message content
+   * @param {function} onEvent - Callback function for each event: (eventType, data) => void
+   * @returns {Promise<void>}
+   */
+  async sendMessageStreamTokens(conversationId, content, onEvent) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}/message/stream-tokens`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to send message');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          try {
+            const event = JSON.parse(data);
+            onEvent(event.type, event);
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  },
+
+  /**
+   * Get circuit breaker status for all models.
+   */
+  async getCircuitBreakerStatus() {
+    const response = await fetch(`${API_BASE}/api/circuit-breaker/status`);
+    if (!response.ok) {
+      throw new Error('Failed to get circuit breaker status');
+    }
+    return response.json();
+  },
 };

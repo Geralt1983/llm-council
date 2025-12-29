@@ -1,25 +1,72 @@
 """3-stage LLM Council orchestration."""
 
-from typing import List, Dict, Any, Tuple
-from .openrouter import query_models_parallel, query_model
+from typing import List, Dict, Any, Tuple, Optional, AsyncGenerator
+from .openrouter import (
+    query_models_parallel,
+    query_model,
+    query_models_parallel_with_circuit_breaker,
+    query_model_with_circuit_breaker,
+    stream_model,
+    CircuitBreaker
+)
 from .config import get_council_models, get_chairman_model
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+def build_messages_with_history(
+    user_query: str,
+    conversation_history: Optional[List[Dict[str, str]]] = None
+) -> List[Dict[str, str]]:
+    """
+    Build messages list including conversation history.
+
+    Args:
+        user_query: The current user query
+        conversation_history: Previous messages in the conversation
+
+    Returns:
+        List of message dicts for the API
+    """
+    messages = []
+
+    # Add conversation history if provided
+    if conversation_history:
+        for msg in conversation_history:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+
+    # Add current query
+    messages.append({"role": "user", "content": user_query})
+
+    return messages
+
+
+async def stage1_collect_responses(
+    user_query: str,
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    use_circuit_breaker: bool = True
+) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
 
     Args:
         user_query: The user's question
+        conversation_history: Previous messages for multi-turn context
+        use_circuit_breaker: Whether to use circuit breaker protection
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
-    messages = [{"role": "user", "content": user_query}]
+    messages = build_messages_with_history(user_query, conversation_history)
 
     # Query all models in parallel
     council_models = get_council_models()
-    responses = await query_models_parallel(council_models, messages)
+
+    if use_circuit_breaker:
+        responses = await query_models_parallel_with_circuit_breaker(council_models, messages)
+    else:
+        responses = await query_models_parallel(council_models, messages)
 
     # Format results
     stage1_results = []
@@ -35,7 +82,8 @@ async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
 
 async def stage2_collect_rankings(
     user_query: str,
-    stage1_results: List[Dict[str, Any]]
+    stage1_results: List[Dict[str, Any]],
+    use_circuit_breaker: bool = True
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each model ranks the anonymized responses.
@@ -43,6 +91,7 @@ async def stage2_collect_rankings(
     Args:
         user_query: The original user query
         stage1_results: Results from Stage 1
+        use_circuit_breaker: Whether to use circuit breaker protection
 
     Returns:
         Tuple of (rankings list, label_to_model mapping)
@@ -97,7 +146,11 @@ Now provide your evaluation and ranking:"""
 
     # Get rankings from all council models in parallel
     council_models = get_council_models()
-    responses = await query_models_parallel(council_models, messages)
+
+    if use_circuit_breaker:
+        responses = await query_models_parallel_with_circuit_breaker(council_models, messages)
+    else:
+        responses = await query_models_parallel(council_models, messages)
 
     # Format results
     stage2_results = []
@@ -114,23 +167,12 @@ Now provide your evaluation and ranking:"""
     return stage2_results, label_to_model
 
 
-async def stage3_synthesize_final(
+def build_chairman_prompt(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
     stage2_results: List[Dict[str, Any]]
-) -> Dict[str, Any]:
-    """
-    Stage 3: Chairman synthesizes final response.
-
-    Args:
-        user_query: The original user query
-        stage1_results: Individual model responses from Stage 1
-        stage2_results: Rankings from Stage 2
-
-    Returns:
-        Dict with 'model' and 'response' keys
-    """
-    # Build comprehensive context for chairman
+) -> str:
+    """Build the chairman synthesis prompt."""
     stage1_text = "\n\n".join([
         f"Model: {result['model']}\nResponse: {result['response']}"
         for result in stage1_results
@@ -141,7 +183,7 @@ async def stage3_synthesize_final(
         for result in stage2_results
     ])
 
-    chairman_prompt = f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
+    return f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
 
 Original Question: {user_query}
 
@@ -158,11 +200,35 @@ Your task as Chairman is to synthesize all of this information into a single, co
 
 Provide a clear, well-reasoned final answer that represents the council's collective wisdom:"""
 
+
+async def stage3_synthesize_final(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]],
+    stage2_results: List[Dict[str, Any]],
+    use_circuit_breaker: bool = True
+) -> Dict[str, Any]:
+    """
+    Stage 3: Chairman synthesizes final response.
+
+    Args:
+        user_query: The original user query
+        stage1_results: Individual model responses from Stage 1
+        stage2_results: Rankings from Stage 2
+        use_circuit_breaker: Whether to use circuit breaker protection
+
+    Returns:
+        Dict with 'model' and 'response' keys
+    """
+    chairman_prompt = build_chairman_prompt(user_query, stage1_results, stage2_results)
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
     chairman_model = get_chairman_model()
-    response = await query_model(chairman_model, messages)
+
+    if use_circuit_breaker:
+        response = await query_model_with_circuit_breaker(chairman_model, messages)
+    else:
+        response = await query_model(chairman_model, messages)
 
     if response is None:
         # Fallback if chairman fails
@@ -175,6 +241,45 @@ Provide a clear, well-reasoned final answer that represents the council's collec
         "model": chairman_model,
         "response": response.get('content', '')
     }
+
+
+async def stage3_synthesize_streaming(
+    user_query: str,
+    stage1_results: List[Dict[str, Any]],
+    stage2_results: List[Dict[str, Any]]
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Stage 3: Chairman synthesizes final response with token streaming.
+
+    Yields:
+        Dict with 'type' (token, done, error), 'model', and 'content'
+    """
+    chairman_prompt = build_chairman_prompt(user_query, stage1_results, stage2_results)
+    messages = [{"role": "user", "content": chairman_prompt}]
+
+    chairman_model = get_chairman_model()
+
+    # Check circuit breaker
+    if not CircuitBreaker.can_execute(chairman_model):
+        yield {
+            "type": "error",
+            "model": chairman_model,
+            "content": "Circuit breaker open - model temporarily unavailable"
+        }
+        return
+
+    async for chunk in stream_model(chairman_model, messages):
+        yield {
+            "type": chunk["type"],
+            "model": chairman_model,
+            "content": chunk["content"]
+        }
+
+        # Record success/failure based on streaming result
+        if chunk["type"] == "done":
+            CircuitBreaker.record_success(chairman_model)
+        elif chunk["type"] == "error":
+            CircuitBreaker.record_failure(chairman_model)
 
 
 def parse_ranking_from_text(ranking_text: str) -> List[str]:

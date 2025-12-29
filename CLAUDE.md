@@ -132,18 +132,52 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 3. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
 4. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
 
+## Phase 2 Features (Completed)
+
+### Token-by-Token Streaming
+- **New Endpoint**: `POST /api/conversations/{id}/message/stream-tokens`
+- Streams individual tokens during Stage 3 synthesis
+- Events: `stage3_token` with incremental content
+- Frontend API: `api.sendMessageStreamTokens(conversationId, content, onEvent)`
+- Fallback: Original `/stream` endpoint still available for stage-level streaming
+
+### Multi-Turn Conversation Context
+- Conversation history automatically passed to models in Stage 1
+- History extracted from previous stage3 syntheses (assistant role)
+- Enables follow-up questions and contextual responses
+- `build_messages_with_history()` in `council.py` handles context assembly
+
+### Circuit Breaker Pattern
+- **Location**: `backend/openrouter.py` - `CircuitBreaker` class
+- **States**: CLOSED (normal), OPEN (failing), HALF_OPEN (testing recovery)
+- **Thresholds**: 3 failures to open, 60s timeout, 2 successes to close
+- **Endpoint**: `GET /api/circuit-breaker/status` - monitor all models
+- Protects against cascading failures from flaky model APIs
+- `query_model_with_circuit_breaker()` wrapper for protected queries
+
+### Testing Infrastructure
+- **Location**: `backend/tests/`
+- **Config**: `backend/pytest.ini`
+- **Dependencies**: `backend/requirements-dev.txt`
+- Test files:
+  - `test_openrouter.py` - API client and circuit breaker tests
+  - `test_council.py` - Council orchestration logic
+  - `test_api.py` - FastAPI endpoint tests
+- Run with: `cd backend && python -m pytest`
+
 ## Future Enhancement Ideas
 
-- Configurable council/chairman via UI instead of config file
-- Streaming responses instead of batch loading
-- Export conversations to markdown/PDF
 - Model performance analytics over time
 - Custom ranking criteria (not just accuracy/insight)
 - Support for reasoning models (o1, etc.) with special handling
+- Rate limiting and cost tracking
+- Model-specific parameter tuning
 
 ## Testing Notes
 
-Use `test_openrouter.py` to verify API connectivity and test different model identifiers before adding to council. The script tests both streaming and non-streaming modes.
+**Unit Tests**: Run `python -m pytest` from the backend directory. Requires `requirements-dev.txt` dependencies.
+
+**Manual Testing**: Use `test_openrouter.py` to verify API connectivity and test different model identifiers before adding to council.
 
 ## Data Flow Summary
 

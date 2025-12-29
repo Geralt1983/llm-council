@@ -17,8 +17,10 @@ from .council import (
     stage1_collect_responses,
     stage2_collect_rankings,
     stage3_synthesize_final,
+    stage3_synthesize_streaming,
     calculate_aggregate_rankings
 )
+from .openrouter import CircuitBreaker
 from .db.session import init_db, migrate_from_json
 
 # Initialize database on module load
@@ -185,11 +187,35 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
     }
 
 
+def get_conversation_history(conversation: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Extract conversation history for multi-turn context.
+
+    Returns list of {role, content} dicts suitable for LLM API.
+    """
+    history = []
+    for msg in conversation.get("messages", []):
+        if msg["role"] == "user":
+            history.append({
+                "role": "user",
+                "content": msg.get("content", "")
+            })
+        elif msg["role"] == "assistant":
+            # Use the stage3 synthesis as the assistant response
+            if msg.get("stage3"):
+                history.append({
+                    "role": "assistant",
+                    "content": msg["stage3"].get("response", "")
+                })
+    return history
+
+
 @app.post("/api/conversations/{conversation_id}/message/stream")
 async def send_message_stream(conversation_id: str, request: SendMessageRequest):
     """
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
+    Supports multi-turn conversation context.
     """
     # Check if conversation exists
     conversation = storage.get_conversation(conversation_id)
@@ -198,6 +224,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
+
+    # Get conversation history for multi-turn context
+    conversation_history = get_conversation_history(conversation)
 
     async def event_generator():
         try:
@@ -209,9 +238,12 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses
+            # Stage 1: Collect responses (with conversation history)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
+            stage1_results = await stage1_collect_responses(
+                request.content,
+                conversation_history=conversation_history
+            )
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
@@ -259,6 +291,116 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             "Connection": "keep-alive",
         }
     )
+
+
+@app.post("/api/conversations/{conversation_id}/message/stream-tokens")
+async def send_message_stream_tokens(conversation_id: str, request: SendMessageRequest):
+    """
+    Send a message with full token-by-token streaming for Stage 3.
+    Returns Server-Sent Events including individual tokens during synthesis.
+    """
+    # Check if conversation exists
+    conversation = storage.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    is_first_message = len(conversation["messages"]) == 0
+    conversation_history = get_conversation_history(conversation)
+
+    async def event_generator():
+        try:
+            storage.add_user_message(conversation_id, request.content)
+
+            title_task = None
+            if is_first_message:
+                title_task = asyncio.create_task(generate_conversation_title(request.content))
+
+            # Stage 1
+            yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
+            stage1_results = await stage1_collect_responses(
+                request.content,
+                conversation_history=conversation_history
+            )
+            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
+
+            # Stage 2
+            yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
+            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+
+            # Stage 3 with token streaming
+            yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
+
+            full_response = ""
+            chairman_model = ""
+
+            async for chunk in stage3_synthesize_streaming(
+                request.content, stage1_results, stage2_results
+            ):
+                chairman_model = chunk.get("model", "")
+
+                if chunk["type"] == "token":
+                    full_response += chunk["content"]
+                    yield f"data: {json.dumps({'type': 'stage3_token', 'data': {'content': chunk['content']}})}\n\n"
+                elif chunk["type"] == "done":
+                    full_response = chunk["content"]
+                elif chunk["type"] == "error":
+                    yield f"data: {json.dumps({'type': 'error', 'message': chunk['content']})}\n\n"
+                    return
+
+            stage3_result = {
+                "model": chairman_model,
+                "response": full_response
+            }
+            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
+
+            # Title generation
+            if title_task:
+                title = await title_task
+                storage.update_conversation_title(conversation_id, title)
+                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+
+            # Save message
+            metadata = {
+                "label_to_model": label_to_model,
+                "aggregate_rankings": aggregate_rankings
+            }
+            storage.add_assistant_message(
+                conversation_id,
+                stage1_results,
+                stage2_results,
+                stage3_result,
+                metadata
+            )
+
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.get("/api/circuit-breaker/status")
+async def get_circuit_breaker_status():
+    """Get circuit breaker status for all models."""
+    from .config import get_council_models, get_chairman_model
+
+    models = get_council_models() + [get_chairman_model()]
+    status = {}
+
+    for model in set(models):
+        status[model] = CircuitBreaker.get_status(model)
+
+    return {"circuit_breaker_status": status}
 
 
 # Settings Endpoints
