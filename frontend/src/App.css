@@ -4,6 +4,7 @@
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -13,4 +14,50 @@
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   transition: background-color 0.3s, color 0.3s;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-bottom: 1px solid #fecaca;
+  font-size: 14px;
+}
+
+.error-banner button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #dc2626;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+}
+
+.error-banner button:hover {
+  color: #b91c1c;
+}
+
+[data-theme="dark"] .error-banner {
+  background: #4d1a1a;
+  color: #f87171;
+  border-color: #7f1d1d;
+}
+
+[data-theme="dark"] .error-banner button {
+  color: #f87171;
+}
+
+[data-theme="dark"] .error-banner button:hover {
+  color: #fca5a5;
 }

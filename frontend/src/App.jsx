@@ -14,6 +14,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [theme, setTheme] = useState('light');
+  const [error, setError] = useState(null);
 
   // Load theme and conversations on mount
   useEffect(() => {
@@ -120,6 +121,7 @@ function App() {
     if (!currentConversationId) return;
 
     setIsLoading(true);
+    setError(null);
     try {
       // Optimistically add user message to UI
       const userMessage = { role: 'user', content };
@@ -236,6 +238,7 @@ function App() {
 
           case 'error':
             console.error('Stream error:', event.message);
+            setError(`Council error: ${event.message}`);
             setIsLoading(false);
             break;
 
@@ -243,8 +246,9 @@ function App() {
             console.log('Unknown event type:', eventType);
         }
       });
-    } catch (error) {
-      console.error('Failed to send message:', error);
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      setError(`Failed to send message: ${err.message}`);
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,
@@ -256,24 +260,32 @@ function App() {
 
   return (
     <div className="app">
-      <Sidebar
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onSelectConversation={handleSelectConversation}
-        onNewConversation={handleNewConversation}
-        onDeleteConversation={handleDeleteConversation}
-        onExportConversation={handleExportConversation}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-      />
-      <ChatInterface
-        conversation={currentConversation}
-        onSendMessage={handleSendMessage}
-        isLoading={isLoading}
-        onExport={(format) =>
-          currentConversationId && handleExportConversation(currentConversationId, format)
-        }
-      />
+      {error && (
+        <div className="error-banner">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      <div className="app-content">
+        <Sidebar
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onExportConversation={handleExportConversation}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenAnalytics={() => setIsAnalyticsOpen(true)}
+        />
+        <ChatInterface
+          conversation={currentConversation}
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
+          onExport={(format) =>
+            currentConversationId && handleExportConversation(currentConversationId, format)
+          }
+        />
+      </div>
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
