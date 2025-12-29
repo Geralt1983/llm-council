@@ -90,6 +90,100 @@ A multi-LLM deliberation platform where AI models collaborate through anonymized
 | API access | Programmatic access to council | Low |
 | Team workspaces | Multi-user support | Low |
 
+### Phase 7: Intelligence & Trust
+**Status:** 💭 Future
+
+**Goal:** Make the council indispensable through trust calibration and intelligent automation.
+
+**The Vision:** Transform from "interesting multi-LLM tool" to "tool I trust for important decisions."
+
+#### 7.1 Trust Calibration (Highest Impact)
+
+| Feature | Description | Priority | Impact |
+|---------|-------------|----------|--------|
+| Disagreement highlighting | Visual map showing WHERE models agree/disagree on specific claims | **Critical** | 🔥 Transforms usability |
+| Confidence prediction | "⚠️ LOW CONSENSUS" vs "✓ HIGH CONFIDENCE" based on agreement metrics | **Critical** | 🔥 Prevents false trust |
+| Claim extraction | Break synthesis into individual factual claims with per-claim confidence | High | Shows uncertainty granularly |
+| Uncertainty flags | Explicit callouts: "Models disagree on: [exact cause of X]" | High | Actionable insights |
+| Quality calibration | Historical tracking: "Council 94% accurate on math questions" | Medium | Builds trust over time |
+
+**Why this matters:** Users currently don't know when to trust the answer. This tells them exactly where the answer is solid vs. where to verify.
+
+#### 7.2 Smart Automation
+
+| Feature | Description | Priority | Impact |
+|---------|-------------|----------|--------|
+| Automatic mode selection | AI decides: simple question → fast model, complex → full council | High | Saves 80% of time/cost |
+| Cost/quality tradeoffs | User picks: Fast ($0.05, 10s) / Balanced / Thorough ($0.40, 45s) | High | Explicit value control |
+| Question classifier | Detect: factual / creative / coding / research → route appropriately | Medium | Better decisions |
+| Decision explanation | "Using full council because: models historically disagree on economics" | Low | Transparency |
+
+**Why this matters:** Currently every query uses the full council. Most queries don't need it. This makes the tool fast for simple questions while maintaining rigor for complex ones.
+
+#### 7.3 Disagreement Deep-Dive
+
+| Feature | Description | Priority | Impact |
+|---------|-------------|----------|--------|
+| Controversy analyzer | Show specific claims with split votes: "3 models say X, 2 say Y" | High | 🔥 Actionable insights |
+| Iterative refinement | Auto-trigger Round 2 when consensus < 70%, focused on contested points | **Critical** | 🔥 Better answers on hard questions |
+| Reasoning comparison | For o1/o3 models, show where logical reasoning paths diverge | Medium | Educational + better synthesis |
+| Claim-level tracking | Track each factual claim across all responses, show support/contradiction | Medium | Granular uncertainty |
+
+**Why this matters:** "Models disagree" is vague. This shows WHAT they disagree about and triggers refinement to resolve it.
+
+#### 7.4 Domain Intelligence
+
+| Feature | Description | Priority | Impact |
+|---------|-------------|----------|--------|
+| Domain classification | Auto-detect question domain: coding / math / creative / research | High | Enables smart weighting |
+| Expertise weighting | "For Python questions, GPT-4's ranking counts 2x" | High | More accurate rankings |
+| Specialized councils | Pre-configured: `/council code`, `/council research`, `/council creative` | Medium | Optimized for use case |
+| Performance tracking | Which models perform best on which domains over time | Medium | Continuous improvement |
+| Learning from outcomes | Track ground truth when available, adjust weights | Low | Self-improving system |
+
+**Why this matters:** Not all models are equal at all tasks. Weighting by domain makes deliberation smarter.
+
+#### 7.5 Real-World Integration
+
+| Feature | Description | Priority | Impact |
+|---------|-------------|----------|--------|
+| Slack bot | `/llm-council "should we use Postgres or MongoDB?"` | High | 🔥 Meets users where they work |
+| CLI tool | `council ask "your question"` for terminal workflows | Medium | Developer adoption |
+| VSCode extension | Highlight code → right-click → "Ask council" | Medium | IDE integration |
+| Public API | REST API for programmatic access | Medium | Enables ecosystem |
+| Share links | Public URLs for council sessions (read-only) | Low | Collaboration |
+
+**Why this matters:** Currently requires opening a web app. Integration into existing workflows drives adoption.
+
+---
+
+## Implementation Priority
+
+**Phase 7 Quick Wins** (Weekend projects with massive impact):
+
+1. **Disagreement Highlighting** (Phase 7.1 + 7.3)
+   - Parse Stage 1 responses into claims
+   - Show which models support each claim
+   - Visual diff of consensus vs. controversy
+   - **Impact:** Transforms tool from "black box" to "transparent deliberation"
+
+2. **Confidence Prediction** (Phase 7.1)
+   - Use existing `agreement_score` and `controversies` metrics
+   - Add simple heuristic: high agreement = high confidence
+   - Show banner: "⚠️ LOW CONSENSUS - VERIFY" or "✓ HIGH CONFIDENCE"
+   - **Impact:** Prevents users from trusting uncertain answers
+
+3. **Iterative Refinement** (Phase 7.3)
+   - When `agreement_score < 0.7`, auto-trigger Round 2
+   - Prompt: "Models, address this disagreement: [extracted controversy]"
+   - Re-run synthesis with refined inputs
+   - **Impact:** Better answers on genuinely hard questions
+
+4. **Smart Routing** (Phase 7.2)
+   - Use fast model to classify question complexity
+   - Simple/factual → single model, Complex/ambiguous → full council
+   - **Impact:** 80% time/cost savings on routine questions
+
 ---
 
 ## Architecture Overview
