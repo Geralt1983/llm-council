@@ -123,9 +123,9 @@ class Settings(Base):
             "council_models": [
                 "openai/gpt-4o",
                 "anthropic/claude-3.5-sonnet",
-                "google/gemini-flash-1.5",
-                "x-ai/grok-beta",
+                "google/gemini-2.5-flash",
+                "x-ai/grok-3",
             ],
-            "chairman_model": "google/gemini-flash-1.5",
+            "chairman_model": "google/gemini-2.5-flash",
             "theme": "light",
         }

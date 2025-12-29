@@ -40,11 +40,11 @@ def get_chairman_model() -> str:
 _DEFAULT_COUNCIL_MODELS = [
     "openai/gpt-4o",
     "anthropic/claude-3.5-sonnet",
-    "google/gemini-flash-1.5",
-    "x-ai/grok-beta",
+    "google/gemini-2.5-flash",
+    "x-ai/grok-3",
 ]
 
-_DEFAULT_CHAIRMAN_MODEL = "google/gemini-flash-1.5"
+_DEFAULT_CHAIRMAN_MODEL = "google/gemini-2.5-flash"
 
 # For backwards compatibility - these now call the dynamic functions
 # but modules can import them directly
