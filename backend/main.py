@@ -36,6 +36,8 @@ app = FastAPI(title="LLM Council API", version="1.1.0")
 cors_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
+    "https://llmcouncil.digital",
+    "https://www.llmcouncil.digital",
 ]
 
 # Add production frontend URL if configured
