@@ -9,7 +9,7 @@ from .openrouter import (
     stream_model,
     CircuitBreaker
 )
-from .config import get_council_models, get_chairman_model
+from .config import get_council_models, get_chairman_model, get_model_parameters
 
 
 # OpenRouter pricing per 1M tokens (approximate, varies by model)
@@ -177,11 +177,12 @@ Where X.X is a number between 0.0 (not confident) and 1.0 (very confident).'''
 
     # Query all models in parallel
     council_models = get_council_models()
+    model_params = get_model_parameters()
 
     if use_circuit_breaker:
-        responses = await query_models_parallel_with_circuit_breaker(council_models, messages)
+        responses = await query_models_parallel_with_circuit_breaker(council_models, messages, model_params)
     else:
-        responses = await query_models_parallel(council_models, messages)
+        responses = await query_models_parallel(council_models, messages, model_params)
 
     # Format results and collect metrics
     stage1_results = []
@@ -329,11 +330,12 @@ async def stage2_collect_rankings(
 
     # Get rankings from all council models in parallel
     council_models = get_council_models()
+    model_params = get_model_parameters()
 
     if use_circuit_breaker:
-        responses = await query_models_parallel_with_circuit_breaker(council_models, messages)
+        responses = await query_models_parallel_with_circuit_breaker(council_models, messages, model_params)
     else:
-        responses = await query_models_parallel(council_models, messages)
+        responses = await query_models_parallel(council_models, messages, model_params)
 
     # Format results and collect metrics
     stage2_results = []
@@ -428,11 +430,21 @@ async def stage3_synthesize_final(
 
     # Query the chairman model
     chairman_model = get_chairman_model()
+    model_params = get_model_parameters()
+
+    # Get chairman-specific parameters
+    chairman_params = {}
+    if chairman_model in model_params:
+        mp = model_params[chairman_model]
+        if "temperature" in mp:
+            chairman_params["temperature"] = mp["temperature"]
+        if "max_tokens" in mp:
+            chairman_params["max_tokens"] = mp["max_tokens"]
 
     if use_circuit_breaker:
-        response = await query_model_with_circuit_breaker(chairman_model, messages)
+        response = await query_model_with_circuit_breaker(chairman_model, messages, **chairman_params)
     else:
-        response = await query_model(chairman_model, messages)
+        response = await query_model(chairman_model, messages, **chairman_params)
 
     # Build metrics
     metrics = response.get('metrics', {}) if response else {}
@@ -477,6 +489,16 @@ async def stage3_synthesize_streaming(
     messages = [{"role": "user", "content": chairman_prompt}]
 
     chairman_model = get_chairman_model()
+    model_params = get_model_parameters()
+
+    # Get chairman-specific parameters for streaming
+    stream_params = {}
+    if chairman_model in model_params:
+        mp = model_params[chairman_model]
+        if "temperature" in mp:
+            stream_params["temperature"] = mp["temperature"]
+        if "max_tokens" in mp:
+            stream_params["max_tokens"] = mp["max_tokens"]
 
     # Check circuit breaker
     if not CircuitBreaker.can_execute(chairman_model):
@@ -487,7 +509,7 @@ async def stage3_synthesize_streaming(
         }
         return
 
-    async for chunk in stream_model(chairman_model, messages):
+    async for chunk in stream_model(chairman_model, messages, **stream_params):
         yield {
             "type": chunk["type"],
             "model": chairman_model,

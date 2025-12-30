@@ -36,6 +36,16 @@ def get_chairman_model() -> str:
         return _DEFAULT_CHAIRMAN_MODEL
 
 
+def get_model_parameters() -> dict:
+    """Get per-model parameters (temperature, max_tokens) from database or empty dict."""
+    try:
+        from .storage import get_council_config
+        config = get_council_config()
+        return config.get("model_parameters", {})
+    except Exception:
+        return {}
+
+
 # Default council configuration (used as fallback)
 _DEFAULT_COUNCIL_MODELS = [
     "openai/gpt-4o",

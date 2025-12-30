@@ -303,4 +303,147 @@ export const api = {
     }
     return response.json();
   },
+
+  // Preset API
+
+  /**
+   * List all presets.
+   */
+  async listPresets() {
+    const response = await fetch(`${API_BASE}/api/presets`);
+    if (!response.ok) {
+      throw new Error('Failed to list presets');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get the currently active preset.
+   */
+  async getDefaultPreset() {
+    const response = await fetch(`${API_BASE}/api/presets/default`);
+    if (!response.ok) {
+      throw new Error('Failed to get default preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get a specific preset by ID.
+   */
+  async getPreset(presetId) {
+    const response = await fetch(`${API_BASE}/api/presets/${presetId}`);
+    if (!response.ok) {
+      throw new Error('Failed to get preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Create a new preset.
+   */
+  async createPreset(preset) {
+    const response = await fetch(`${API_BASE}/api/presets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(preset),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to create preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Update an existing preset.
+   */
+  async updatePreset(presetId, preset) {
+    const response = await fetch(`${API_BASE}/api/presets/${presetId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(preset),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a preset.
+   */
+  async deletePreset(presetId) {
+    const response = await fetch(`${API_BASE}/api/presets/${presetId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Apply a preset to the current council configuration.
+   */
+  async applyPreset(presetId) {
+    const response = await fetch(`${API_BASE}/api/presets/${presetId}/apply`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to apply preset');
+    }
+    return response.json();
+  },
+
+  /**
+   * Save the current configuration as a new preset.
+   */
+  async saveCurrentAsPreset(name, description = null) {
+    const params = new URLSearchParams({ name });
+    if (description) {
+      params.append('description', description);
+    }
+    const response = await fetch(`${API_BASE}/api/presets/save-current?${params}`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to save current config as preset');
+    }
+    return response.json();
+  },
+
+  // Model Discovery API
+
+  /**
+   * Get all available models from OpenRouter.
+   * @param {string} search - Optional search term to filter models
+   * @param {boolean} refresh - Force refresh from API instead of cache
+   */
+  async getAvailableModels(search = null, refresh = false) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (refresh) params.append('refresh', 'true');
+
+    const url = `${API_BASE}/api/models${params.toString() ? '?' + params : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to get available models');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get curated list of popular models.
+   */
+  async getPopularModels() {
+    const response = await fetch(`${API_BASE}/api/models/popular`);
+    if (!response.ok) {
+      throw new Error('Failed to get popular models');
+    }
+    return response.json();
+  },
 };

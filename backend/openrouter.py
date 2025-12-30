@@ -7,6 +7,14 @@ import re
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
 
+# OpenRouter models endpoint
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+# Cache for models list
+_models_cache: Optional[Dict[str, Any]] = None
+_models_cache_time: float = 0
+MODELS_CACHE_TTL = 300  # 5 minutes
+
 
 # Patterns to identify reasoning models
 REASONING_MODEL_PATTERNS = [
@@ -32,6 +40,76 @@ def is_reasoning_model(model: str) -> bool:
     """
     model_lower = model.lower()
     return any(re.search(pattern, model_lower) for pattern in REASONING_MODEL_PATTERNS)
+
+
+async def fetch_available_models(
+    force_refresh: bool = False
+) -> List[Dict[str, Any]]:
+    """
+    Fetch available models from OpenRouter API.
+
+    Returns a list of model objects with id, name, description, pricing, etc.
+    Results are cached for 5 minutes unless force_refresh is True.
+    """
+    global _models_cache, _models_cache_time
+
+    # Check cache
+    if not force_refresh and _models_cache is not None:
+        if time.time() - _models_cache_time < MODELS_CACHE_TTL:
+            return _models_cache.get("data", [])
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                OPENROUTER_MODELS_URL,
+                headers=headers
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            _models_cache = data
+            _models_cache_time = time.time()
+
+            return data.get("data", [])
+
+    except Exception as e:
+        print(f"Error fetching models from OpenRouter: {e}")
+        # Return cached data if available, otherwise empty list
+        if _models_cache is not None:
+            return _models_cache.get("data", [])
+        return []
+
+
+def format_model_for_display(model: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Format a model from OpenRouter API for frontend display.
+
+    Extracts key information and adds computed fields like is_reasoning.
+    """
+    model_id = model.get("id", "")
+    pricing = model.get("pricing", {})
+
+    # Calculate cost per 1M tokens
+    prompt_cost = float(pricing.get("prompt", 0)) * 1_000_000
+    completion_cost = float(pricing.get("completion", 0)) * 1_000_000
+
+    return {
+        "id": model_id,
+        "name": model.get("name", model_id),
+        "description": model.get("description", ""),
+        "context_length": model.get("context_length", 0),
+        "is_reasoning": is_reasoning_model(model_id),
+        "pricing": {
+            "prompt_per_million": prompt_cost,
+            "completion_per_million": completion_cost,
+        },
+        "top_provider": model.get("top_provider", {}),
+    }
 
 
 def prepare_messages_for_model(
@@ -71,11 +149,11 @@ def prepare_messages_for_model(
     return merged
 
 
-def get_model_parameters(model: str) -> Dict[str, Any]:
+def get_reasoning_model_params(model: str) -> Dict[str, Any]:
     """
-    Get model-specific parameters for the API request.
+    Get reasoning model-specific parameters for the API request.
 
-    Returns parameters dict to merge with the payload.
+    Returns parameters dict to merge with the payload for reasoning models.
     """
     params = {}
 
@@ -90,7 +168,9 @@ def get_model_parameters(model: str) -> Dict[str, Any]:
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 120.0,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API.
@@ -99,6 +179,8 @@ async def query_model(
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
+        temperature: Optional temperature for response generation (0.0-2.0)
+        max_tokens: Optional maximum tokens in response
 
     Returns:
         Response dict with 'content', optional 'reasoning_details', and metrics, or None if failed
@@ -117,9 +199,19 @@ async def query_model(
         "messages": prepared_messages,
     }
 
-    # Add model-specific parameters (e.g., reasoning_effort for o1/o3)
-    model_params = get_model_parameters(model)
-    payload.update(model_params)
+    # Add reasoning model-specific parameters (e.g., reasoning_effort for o1/o3)
+    reasoning_params = get_reasoning_model_params(model)
+
+    # For reasoning models, don't add temperature (they don't support it)
+    if not is_reasoning_model(model):
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+    # Add max_tokens if specified
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    payload.update(reasoning_params)
 
     is_reasoning = is_reasoning_model(model)
     start_time = time.time()
@@ -176,7 +268,8 @@ async def query_model(
 
 async def query_models_parallel(
     models: List[str],
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, str]],
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
     Query multiple models in parallel.
@@ -184,14 +277,24 @@ async def query_models_parallel(
     Args:
         models: List of OpenRouter model identifiers
         messages: List of message dicts to send to each model
+        model_parameters: Optional dict mapping model_id to {temperature, max_tokens}
 
     Returns:
         Dict mapping model identifier to response dict (or None if failed)
     """
     import asyncio
 
-    # Create tasks for all models
-    tasks = [query_model(model, messages) for model in models]
+    # Create tasks for all models with their specific parameters
+    tasks = []
+    for model in models:
+        params = {}
+        if model_parameters and model in model_parameters:
+            mp = model_parameters[model]
+            if "temperature" in mp:
+                params["temperature"] = mp["temperature"]
+            if "max_tokens" in mp:
+                params["max_tokens"] = mp["max_tokens"]
+        tasks.append(query_model(model, messages, **params))
 
     # Wait for all to complete
     responses = await asyncio.gather(*tasks)
@@ -203,7 +306,9 @@ async def query_models_parallel(
 async def stream_model(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 120.0,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stream tokens from a single model via OpenRouter API.
@@ -212,6 +317,8 @@ async def stream_model(
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
+        temperature: Optional temperature for response generation (0.0-2.0)
+        max_tokens: Optional maximum tokens in response
 
     Yields:
         Dict with 'type' (token, reasoning, done, error) and 'content'
@@ -230,9 +337,19 @@ async def stream_model(
         "stream": True,
     }
 
-    # Add model-specific parameters
-    model_params = get_model_parameters(model)
-    payload.update(model_params)
+    # Add reasoning model-specific parameters
+    reasoning_params = get_reasoning_model_params(model)
+
+    # For reasoning models, don't add temperature (they don't support it)
+    if not is_reasoning_model(model):
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+    # Add max_tokens if specified
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    payload.update(reasoning_params)
 
     is_reasoning = is_reasoning_model(model)
 
@@ -377,7 +494,9 @@ class CircuitBreaker:
 async def query_model_with_circuit_breaker(
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 120.0,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Query a model with circuit breaker protection.
@@ -395,7 +514,7 @@ async def query_model_with_circuit_breaker(
             }
         }
 
-    result = await query_model(model, messages, timeout)
+    result = await query_model(model, messages, timeout, temperature, max_tokens)
 
     if result is None or result.get('content') is None:
         CircuitBreaker.record_failure(model)
@@ -407,14 +526,25 @@ async def query_model_with_circuit_breaker(
 
 async def query_models_parallel_with_circuit_breaker(
     models: List[str],
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, str]],
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
     Query multiple models in parallel with circuit breaker protection.
     """
     import asyncio
 
-    tasks = [query_model_with_circuit_breaker(model, messages) for model in models]
+    tasks = []
+    for model in models:
+        params = {}
+        if model_parameters and model in model_parameters:
+            mp = model_parameters[model]
+            if "temperature" in mp:
+                params["temperature"] = mp["temperature"]
+            if "max_tokens" in mp:
+                params["max_tokens"] = mp["max_tokens"]
+        tasks.append(query_model_with_circuit_breaker(model, messages, **params))
+
     responses = await asyncio.gather(*tasks)
 
     return {model: response for model, response in zip(models, responses)}

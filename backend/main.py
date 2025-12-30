@@ -21,7 +21,7 @@ from .council import (
     calculate_aggregate_rankings,
     calculate_dissent_metrics
 )
-from .openrouter import CircuitBreaker
+from .openrouter import CircuitBreaker, fetch_available_models, format_model_for_display
 from .db.session import init_db, migrate_from_json
 
 # Initialize database on module load
@@ -101,6 +101,8 @@ class CouncilConfigRequest(BaseModel):
     model_weights: Optional[Dict[str, float]] = None
     enable_confidence: Optional[bool] = None
     enable_dissent_tracking: Optional[bool] = None
+    # Phase 5: Model Management
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 class CouncilConfigResponse(BaseModel):
@@ -113,11 +115,35 @@ class CouncilConfigResponse(BaseModel):
     model_weights: Dict[str, float] = {}
     enable_confidence: bool = False
     enable_dissent_tracking: bool = True
+    # Phase 5: Model Management
+    model_parameters: Dict[str, Dict[str, Any]] = {}
 
 
 class ExportRequest(BaseModel):
     """Request to export a conversation."""
     format: str = "markdown"  # markdown, json
+
+
+class PresetRequest(BaseModel):
+    """Request to create or update a preset."""
+    name: str
+    description: Optional[str] = None
+    council_models: List[str]
+    chairman_model: str
+    model_weights: Optional[Dict[str, float]] = None
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None
+
+
+class PresetUpdateRequest(BaseModel):
+    """Request to update a preset (all fields optional)."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    council_models: Optional[List[str]] = None
+    chairman_model: Optional[str] = None
+    model_weights: Optional[Dict[str, float]] = None
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None
 
 
 # Health Check
@@ -535,6 +561,77 @@ async def get_circuit_breaker_status():
     return {"circuit_breaker_status": status}
 
 
+# Model Discovery Endpoints
+
+@app.get("/api/models")
+async def get_available_models(
+    search: Optional[str] = None,
+    refresh: bool = False
+):
+    """
+    Get available models from OpenRouter.
+
+    Args:
+        search: Optional search term to filter models by name or id
+        refresh: Force refresh from API instead of using cache
+
+    Returns:
+        List of available models with metadata
+    """
+    raw_models = await fetch_available_models(force_refresh=refresh)
+
+    # Format models for display
+    models = [format_model_for_display(m) for m in raw_models]
+
+    # Filter by search term if provided
+    if search:
+        search_lower = search.lower()
+        models = [
+            m for m in models
+            if search_lower in m["id"].lower() or search_lower in m["name"].lower()
+        ]
+
+    # Sort by name
+    models.sort(key=lambda m: m["name"].lower())
+
+    return {"models": models, "count": len(models)}
+
+
+@app.get("/api/models/popular")
+async def get_popular_models():
+    """Get a curated list of popular models for quick selection."""
+    popular_ids = [
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "openai/o1",
+        "openai/o1-mini",
+        "anthropic/claude-3.5-sonnet",
+        "anthropic/claude-3.5-haiku",
+        "anthropic/claude-3-opus",
+        "google/gemini-2.5-flash",
+        "google/gemini-2.5-pro",
+        "meta-llama/llama-3.3-70b-instruct",
+        "deepseek/deepseek-chat",
+        "deepseek/deepseek-r1",
+        "x-ai/grok-3",
+        "x-ai/grok-3-mini",
+        "mistralai/mistral-large",
+        "qwen/qwen-2.5-72b-instruct",
+    ]
+
+    raw_models = await fetch_available_models()
+
+    # Find matching models
+    popular = []
+    model_map = {m.get("id"): m for m in raw_models}
+
+    for model_id in popular_ids:
+        if model_id in model_map:
+            popular.append(format_model_for_display(model_map[model_id]))
+
+    return {"models": popular}
+
+
 # Settings Endpoints
 
 @app.get("/api/settings/council", response_model=CouncilConfigResponse)
@@ -547,6 +644,7 @@ async def get_council_config():
         theme=config.get("theme", "light"),
         ranking_criteria=config.get("ranking_criteria", []),
         model_weights=config.get("model_weights", {}),
+        model_parameters=config.get("model_parameters", {}),
         enable_confidence=config.get("enable_confidence", False),
         enable_dissent_tracking=config.get("enable_dissent_tracking", True)
     )
@@ -561,6 +659,7 @@ async def update_council_config(request: CouncilConfigRequest):
         theme=request.theme,
         ranking_criteria=request.ranking_criteria,
         model_weights=request.model_weights,
+        model_parameters=request.model_parameters,
         enable_confidence=request.enable_confidence,
         enable_dissent_tracking=request.enable_dissent_tracking
     )
@@ -570,9 +669,103 @@ async def update_council_config(request: CouncilConfigRequest):
         theme=config.get("theme", "light"),
         ranking_criteria=config.get("ranking_criteria", []),
         model_weights=config.get("model_weights", {}),
+        model_parameters=config.get("model_parameters", {}),
         enable_confidence=config.get("enable_confidence", False),
         enable_dissent_tracking=config.get("enable_dissent_tracking", True)
     )
+
+
+# Preset Endpoints
+
+@app.get("/api/presets")
+async def list_presets():
+    """List all presets."""
+    return storage.list_presets()
+
+
+@app.get("/api/presets/default")
+async def get_default_preset():
+    """Get the currently active preset."""
+    preset = storage.get_default_preset()
+    if preset is None:
+        return {"preset": None}
+    return {"preset": preset}
+
+
+@app.get("/api/presets/{preset_id}")
+async def get_preset(preset_id: int):
+    """Get a specific preset."""
+    preset = storage.get_preset(preset_id)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return preset
+
+
+@app.post("/api/presets")
+async def create_preset(request: PresetRequest):
+    """Create a new preset."""
+    preset = storage.create_preset(
+        name=request.name,
+        description=request.description,
+        council_models=request.council_models,
+        chairman_model=request.chairman_model,
+        model_weights=request.model_weights,
+        model_parameters=request.model_parameters,
+        ranking_criteria=request.ranking_criteria
+    )
+    return preset
+
+
+@app.put("/api/presets/{preset_id}")
+async def update_preset(preset_id: int, request: PresetUpdateRequest):
+    """Update an existing preset."""
+    preset = storage.update_preset(
+        preset_id=preset_id,
+        name=request.name,
+        description=request.description,
+        council_models=request.council_models,
+        chairman_model=request.chairman_model,
+        model_weights=request.model_weights,
+        model_parameters=request.model_parameters,
+        ranking_criteria=request.ranking_criteria
+    )
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return preset
+
+
+@app.delete("/api/presets/{preset_id}")
+async def delete_preset(preset_id: int):
+    """Delete a preset."""
+    deleted = storage.delete_preset(preset_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "deleted", "id": preset_id}
+
+
+@app.post("/api/presets/{preset_id}/apply")
+async def apply_preset(preset_id: int):
+    """Apply a preset to the current council configuration."""
+    config = storage.apply_preset(preset_id)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "applied", "config": config}
+
+
+@app.post("/api/presets/save-current")
+async def save_current_as_preset(name: str, description: Optional[str] = None):
+    """Save the current council configuration as a new preset."""
+    config = storage.get_council_config()
+    preset = storage.create_preset(
+        name=name,
+        description=description,
+        council_models=config.get("council_models", []),
+        chairman_model=config.get("chairman_model", ""),
+        model_weights=config.get("model_weights"),
+        model_parameters=config.get("model_parameters"),
+        ranking_criteria=config.get("ranking_criteria")
+    )
+    return preset
 
 
 # Export Endpoints

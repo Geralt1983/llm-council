@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func
 
 from .db.session import get_db_context
-from .db.models import Conversation, Message, Settings, ModelMetric
+from .db.models import Conversation, Message, Settings, ModelMetric, Preset
 
 
 def create_conversation(conversation_id: str) -> Dict[str, Any]:
@@ -234,6 +234,7 @@ def update_council_config(
     theme: Optional[str] = None,
     ranking_criteria: Optional[List[Dict[str, Any]]] = None,
     model_weights: Optional[Dict[str, float]] = None,
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None,
     enable_confidence: Optional[bool] = None,
     enable_dissent_tracking: Optional[bool] = None
 ) -> Dict[str, Any]:
@@ -246,6 +247,7 @@ def update_council_config(
         theme: UI theme ('light' or 'dark')
         ranking_criteria: List of ranking criteria with weights
         model_weights: Dict mapping model_id to voting weight
+        model_parameters: Dict mapping model_id to {temperature, max_tokens}
         enable_confidence: Whether to request confidence scores
         enable_dissent_tracking: Whether to track disagreements
 
@@ -264,6 +266,8 @@ def update_council_config(
         config["ranking_criteria"] = ranking_criteria
     if model_weights is not None:
         config["model_weights"] = model_weights
+    if model_parameters is not None:
+        config["model_parameters"] = model_parameters
     if enable_confidence is not None:
         config["enable_confidence"] = enable_confidence
     if enable_dissent_tracking is not None:
@@ -443,3 +447,205 @@ def get_recent_metrics(limit: int = 100) -> List[Dict[str, Any]]:
             'error_type': m.error_type,
             'created_at': m.created_at.isoformat() if m.created_at else None,
         } for m in metrics]
+
+
+# Preset Management
+
+def list_presets() -> List[Dict[str, Any]]:
+    """
+    List all presets.
+
+    Returns:
+        List of preset dicts
+    """
+    with get_db_context() as db:
+        presets = db.query(Preset).order_by(Preset.name).all()
+        return [p.to_dict() for p in presets]
+
+
+def get_preset(preset_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get a preset by ID.
+
+    Args:
+        preset_id: Preset identifier
+
+    Returns:
+        Preset dict or None if not found
+    """
+    with get_db_context() as db:
+        preset = db.query(Preset).filter(Preset.id == preset_id).first()
+        return preset.to_dict() if preset else None
+
+
+def create_preset(
+    name: str,
+    council_models: List[str],
+    chairman_model: str,
+    description: Optional[str] = None,
+    model_weights: Optional[Dict[str, float]] = None,
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None,
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Create a new preset.
+
+    Args:
+        name: Preset name
+        council_models: List of model identifiers
+        chairman_model: Chairman model identifier
+        description: Optional description
+        model_weights: Optional model weight overrides
+        model_parameters: Optional per-model parameters
+        ranking_criteria: Optional ranking criteria
+
+    Returns:
+        Created preset dict
+    """
+    with get_db_context() as db:
+        preset = Preset(
+            name=name,
+            description=description,
+            council_models=council_models,
+            chairman_model=chairman_model,
+            model_weights=model_weights,
+            model_parameters=model_parameters,
+            ranking_criteria=ranking_criteria
+        )
+        db.add(preset)
+        db.commit()
+        db.refresh(preset)
+        return preset.to_dict()
+
+
+def update_preset(
+    preset_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    council_models: Optional[List[str]] = None,
+    chairman_model: Optional[str] = None,
+    model_weights: Optional[Dict[str, float]] = None,
+    model_parameters: Optional[Dict[str, Dict[str, Any]]] = None,
+    ranking_criteria: Optional[List[Dict[str, Any]]] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Update an existing preset.
+
+    Args:
+        preset_id: Preset identifier
+        name: New name (optional)
+        description: New description (optional)
+        council_models: New council models (optional)
+        chairman_model: New chairman model (optional)
+        model_weights: New model weights (optional)
+        model_parameters: New per-model parameters (optional)
+        ranking_criteria: New ranking criteria (optional)
+
+    Returns:
+        Updated preset dict or None if not found
+    """
+    with get_db_context() as db:
+        preset = db.query(Preset).filter(Preset.id == preset_id).first()
+        if preset is None:
+            return None
+
+        if name is not None:
+            preset.name = name
+        if description is not None:
+            preset.description = description
+        if council_models is not None:
+            preset.council_models = council_models
+        if chairman_model is not None:
+            preset.chairman_model = chairman_model
+        if model_weights is not None:
+            preset.model_weights = model_weights
+        if model_parameters is not None:
+            preset.model_parameters = model_parameters
+        if ranking_criteria is not None:
+            preset.ranking_criteria = ranking_criteria
+
+        db.commit()
+        db.refresh(preset)
+        return preset.to_dict()
+
+
+def delete_preset(preset_id: int) -> bool:
+    """
+    Delete a preset.
+
+    Args:
+        preset_id: Preset identifier
+
+    Returns:
+        True if deleted, False if not found
+    """
+    with get_db_context() as db:
+        preset = db.query(Preset).filter(Preset.id == preset_id).first()
+        if preset is None:
+            return False
+
+        db.delete(preset)
+        db.commit()
+        return True
+
+
+def set_default_preset(preset_id: int) -> bool:
+    """
+    Set a preset as the default (active) preset.
+
+    Args:
+        preset_id: Preset identifier
+
+    Returns:
+        True if set, False if preset not found
+    """
+    with get_db_context() as db:
+        # First, unset any existing default
+        db.query(Preset).filter(Preset.is_default == 1).update({"is_default": 0})
+
+        # Set the new default
+        preset = db.query(Preset).filter(Preset.id == preset_id).first()
+        if preset is None:
+            return False
+
+        preset.is_default = 1
+        db.commit()
+        return True
+
+
+def get_default_preset() -> Optional[Dict[str, Any]]:
+    """
+    Get the default (active) preset.
+
+    Returns:
+        Default preset dict or None if not set
+    """
+    with get_db_context() as db:
+        preset = db.query(Preset).filter(Preset.is_default == 1).first()
+        return preset.to_dict() if preset else None
+
+
+def apply_preset(preset_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Apply a preset to the current council configuration.
+
+    Args:
+        preset_id: Preset identifier
+
+    Returns:
+        Updated council config or None if preset not found
+    """
+    preset = get_preset(preset_id)
+    if preset is None:
+        return None
+
+    # Set as default
+    set_default_preset(preset_id)
+
+    # Update council config with preset values
+    return update_council_config(
+        council_models=preset['council_models'],
+        chairman_model=preset['chairman_model'],
+        model_weights=preset.get('model_weights'),
+        ranking_criteria=preset.get('ranking_criteria')
+    )

@@ -1,38 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import './Settings.css';
 
-// Common OpenRouter models
-const AVAILABLE_MODELS = [
-  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI' },
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
-  { id: 'openai/o1', name: 'o1', provider: 'OpenAI', isReasoning: true },
-  { id: 'openai/o1-mini', name: 'o1 Mini', provider: 'OpenAI', isReasoning: true },
-  { id: 'openai/o1-preview', name: 'o1 Preview', provider: 'OpenAI', isReasoning: true },
-  { id: 'openai/o3-mini', name: 'o3 Mini', provider: 'OpenAI', isReasoning: true },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
-  { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-  { id: 'anthropic/claude-3-haiku', name: 'Claude 3 Haiku', provider: 'Anthropic' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google' },
-  { id: 'google/gemini-2.0-flash-thinking', name: 'Gemini 2.0 Flash Thinking', provider: 'Google', isReasoning: true },
-  { id: 'google/gemini-flash-1.5', name: 'Gemini Flash 1.5', provider: 'Google' },
-  { id: 'x-ai/grok-3', name: 'Grok 3', provider: 'xAI' },
-  { id: 'x-ai/grok-2', name: 'Grok 2', provider: 'xAI' },
-  { id: 'meta-llama/llama-3.1-405b-instruct', name: 'Llama 3.1 405B', provider: 'Meta' },
-  { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', provider: 'Meta' },
-  { id: 'mistralai/mistral-large', name: 'Mistral Large', provider: 'Mistral' },
-  { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', provider: 'DeepSeek' },
-  { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner', provider: 'DeepSeek', isReasoning: true },
-  { id: 'perplexity/sonar-pro', name: 'Sonar Pro', provider: 'Perplexity' },
-];
-
 // Helper to check if a model is a reasoning model
 const isReasoningModel = (modelId) => {
-  const model = AVAILABLE_MODELS.find(m => m.id === modelId);
-  if (model?.isReasoning) return true;
-  // Also check pattern for custom models
-  const patterns = ['o1', 'o3', 'reasoning', 'thinking'];
+  const patterns = ['o1', 'o3', 'reasoning', 'thinking', 'reasoner'];
   return patterns.some(p => modelId.toLowerCase().includes(p));
 };
 
@@ -50,6 +22,7 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
     theme: 'light',
     ranking_criteria: DEFAULT_CRITERIA,
     model_weights: {},
+    model_parameters: {},
     enable_confidence: false,
     enable_dissent_tracking: true,
   });
@@ -60,11 +33,58 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
   const [success, setSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('models');
 
+  // Preset state
+  const [presets, setPresets] = useState([]);
+  const [activePreset, setActivePreset] = useState(null);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetDescription, setNewPresetDescription] = useState('');
+  const [showSavePreset, setShowSavePreset] = useState(false);
+
+  // Model discovery state
+  const [popularModels, setPopularModels] = useState([]);
+  const [searchedModels, setSearchedModels] = useState([]);
+  const [modelSearch, setModelSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showModelSearch, setShowModelSearch] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       loadConfig();
+      loadPresets();
+      loadPopularModels();
     }
   }, [isOpen]);
+
+  const loadPopularModels = async () => {
+    try {
+      const data = await api.getPopularModels();
+      setPopularModels(data.models || []);
+    } catch (e) {
+      console.error('Failed to load popular models:', e);
+    }
+  };
+
+  // Debounced model search
+  useEffect(() => {
+    if (!modelSearch.trim()) {
+      setSearchedModels([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const data = await api.getAvailableModels(modelSearch.trim());
+        setSearchedModels(data.models || []);
+      } catch (e) {
+        console.error('Failed to search models:', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [modelSearch]);
 
   const loadConfig = async () => {
     try {
@@ -73,6 +93,73 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
       setError(null);
     } catch (e) {
       setError('Failed to load settings');
+    }
+  };
+
+  const loadPresets = async () => {
+    try {
+      const [presetList, defaultPreset] = await Promise.all([
+        api.listPresets(),
+        api.getDefaultPreset(),
+      ]);
+      setPresets(presetList);
+      setActivePreset(defaultPreset.preset);
+    } catch (e) {
+      console.error('Failed to load presets:', e);
+    }
+  };
+
+  const handleApplyPreset = async (presetId) => {
+    try {
+      const result = await api.applyPreset(presetId);
+      setConfig({
+        ...config,
+        council_models: result.config.council_models,
+        chairman_model: result.config.chairman_model,
+        model_weights: result.config.model_weights || {},
+        model_parameters: result.config.model_parameters || {},
+        ranking_criteria: result.config.ranking_criteria || config.ranking_criteria,
+      });
+      await loadPresets();
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (e) {
+      setError('Failed to apply preset');
+    }
+  };
+
+  const handleSavePreset = async () => {
+    if (!newPresetName.trim()) return;
+
+    try {
+      await api.createPreset({
+        name: newPresetName.trim(),
+        description: newPresetDescription.trim() || null,
+        council_models: config.council_models,
+        chairman_model: config.chairman_model,
+        model_weights: config.model_weights,
+        model_parameters: config.model_parameters,
+        ranking_criteria: config.ranking_criteria,
+      });
+      await loadPresets();
+      setNewPresetName('');
+      setNewPresetDescription('');
+      setShowSavePreset(false);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (e) {
+      setError('Failed to save preset');
+    }
+  };
+
+  const handleDeletePreset = async (presetId) => {
+    if (!confirm('Delete this preset?')) return;
+
+    try {
+      await api.deletePreset(presetId);
+      await loadPresets();
+    } catch (e) {
+      setError('Failed to delete preset');
     }
   };
 
@@ -186,6 +273,39 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
     return (config.model_weights || {})[modelId] || 1.0;
   };
 
+  // Phase 5: Model Parameters Management
+  const getModelParameter = (modelId, param) => {
+    const params = (config.model_parameters || {})[modelId] || {};
+    if (param === 'temperature') {
+      return params.temperature ?? '';
+    }
+    if (param === 'max_tokens') {
+      return params.max_tokens ?? '';
+    }
+    return '';
+  };
+
+  const updateModelParameter = (modelId, param, value) => {
+    const params = { ...(config.model_parameters || {}) };
+    if (!params[modelId]) {
+      params[modelId] = {};
+    }
+    if (value === '' || value === null || value === undefined) {
+      delete params[modelId][param];
+      // Clean up empty objects
+      if (Object.keys(params[modelId]).length === 0) {
+        delete params[modelId];
+      }
+    } else {
+      if (param === 'temperature') {
+        params[modelId][param] = parseFloat(value);
+      } else if (param === 'max_tokens') {
+        params[modelId][param] = parseInt(value, 10);
+      }
+    }
+    setConfig({ ...config, model_parameters: params });
+  };
+
   // Get short model name for display
   const getShortModelName = (modelId) => {
     const parts = modelId.split('/');
@@ -211,6 +331,12 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
           {/* Settings Tabs */}
           <div className="settings-tabs">
             <button
+              className={`settings-tab ${activeTab === 'presets' ? 'active' : ''}`}
+              onClick={() => setActiveTab('presets')}
+            >
+              Presets
+            </button>
+            <button
               className={`settings-tab ${activeTab === 'models' ? 'active' : ''}`}
               onClick={() => setActiveTab('models')}
             >
@@ -229,6 +355,108 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
               Display
             </button>
           </div>
+
+          {/* Presets Tab */}
+          {activeTab === 'presets' && (
+            <>
+              <section className="settings-section">
+                <h3>Council Presets</h3>
+                <p className="settings-description">
+                  Save and load different council configurations quickly.
+                </p>
+
+                {/* Current Config Summary */}
+                <div className="current-config-summary">
+                  <h4>Current Configuration</h4>
+                  <div className="config-summary-content">
+                    <span className="config-summary-item">
+                      <strong>Models:</strong> {config.council_models.length}
+                    </span>
+                    <span className="config-summary-item">
+                      <strong>Chairman:</strong> {config.chairman_model ? getShortModelName(config.chairman_model) : 'Not set'}
+                    </span>
+                  </div>
+                  {!showSavePreset ? (
+                    <button
+                      className="save-preset-btn"
+                      onClick={() => setShowSavePreset(true)}
+                      disabled={config.council_models.length === 0}
+                    >
+                      Save as Preset
+                    </button>
+                  ) : (
+                    <div className="save-preset-form">
+                      <input
+                        type="text"
+                        placeholder="Preset name"
+                        value={newPresetName}
+                        onChange={(e) => setNewPresetName(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Description (optional)"
+                        value={newPresetDescription}
+                        onChange={(e) => setNewPresetDescription(e.target.value)}
+                      />
+                      <div className="save-preset-actions">
+                        <button onClick={handleSavePreset} disabled={!newPresetName.trim()}>
+                          Save
+                        </button>
+                        <button onClick={() => setShowSavePreset(false)} className="cancel">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Preset List */}
+                <div className="preset-list">
+                  {presets.length === 0 ? (
+                    <p className="no-presets">No presets saved yet. Create one above!</p>
+                  ) : (
+                    presets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className={`preset-item ${activePreset?.id === preset.id ? 'active' : ''}`}
+                      >
+                        <div className="preset-info">
+                          <span className="preset-name">
+                            {preset.name}
+                            {activePreset?.id === preset.id && (
+                              <span className="active-badge">Active</span>
+                            )}
+                          </span>
+                          {preset.description && (
+                            <span className="preset-description">{preset.description}</span>
+                          )}
+                          <span className="preset-details">
+                            {preset.council_models.length} models &middot; Chairman: {getShortModelName(preset.chairman_model)}
+                          </span>
+                        </div>
+                        <div className="preset-actions">
+                          <button
+                            className="apply-preset-btn"
+                            onClick={() => handleApplyPreset(preset.id)}
+                            disabled={activePreset?.id === preset.id}
+                          >
+                            {activePreset?.id === preset.id ? 'Active' : 'Apply'}
+                          </button>
+                          <button
+                            className="delete-preset-btn"
+                            onClick={() => handleDeletePreset(preset.id)}
+                            title="Delete preset"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          )}
 
           {/* Models Tab */}
           {activeTab === 'models' && (
@@ -281,7 +509,7 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
                   ))}
                 </div>
 
-                {/* Add Model Dropdown */}
+                {/* Add Model - Popular Models Dropdown */}
                 <div className="add-model">
                   <select
                     onChange={(e) => {
@@ -292,15 +520,66 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
                     }}
                     defaultValue=""
                   >
-                    <option value="">Add a model...</option>
-                    {AVAILABLE_MODELS.filter(
+                    <option value="">Add from popular models...</option>
+                    {popularModels.filter(
                       (m) => !config.council_models.includes(m.id)
                     ).map((model) => (
                       <option key={model.id} value={model.id}>
-                        {model.name} ({model.provider}){model.isReasoning ? ' [Reasoning]' : ''}
+                        {model.name}{model.is_reasoning ? ' [Reasoning]' : ''}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Model Search */}
+                <div className="model-search-container">
+                  <button
+                    className="model-search-toggle"
+                    onClick={() => setShowModelSearch(!showModelSearch)}
+                  >
+                    {showModelSearch ? 'Hide Search' : 'Search All Models'}
+                  </button>
+
+                  {showModelSearch && (
+                    <div className="model-search">
+                      <input
+                        type="text"
+                        placeholder="Search OpenRouter models..."
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                      />
+                      {isSearching && <span className="search-indicator">Searching...</span>}
+
+                      {searchedModels.length > 0 && (
+                        <div className="search-results">
+                          {searchedModels.filter(
+                            (m) => !config.council_models.includes(m.id)
+                          ).slice(0, 20).map((model) => (
+                            <div
+                              key={model.id}
+                              className="search-result-item"
+                              onClick={() => {
+                                addModel(model.id);
+                                setModelSearch('');
+                                setSearchedModels([]);
+                              }}
+                            >
+                              <div className="search-result-name">
+                                {model.name}
+                                {model.is_reasoning && <span className="reasoning-tag">R</span>}
+                              </div>
+                              <div className="search-result-id">{model.id}</div>
+                              {model.pricing && (
+                                <div className="search-result-pricing">
+                                  ${model.pricing.prompt_per_million?.toFixed(2) || '?'}/M input
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Custom Model Input */}
@@ -361,6 +640,56 @@ export default function Settings({ isOpen, onClose, onThemeChange }) {
                         className="weight-slider"
                       />
                       <span className="weight-value">{getModelWeight(model).toFixed(1)}x</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Model Parameters */}
+              <section className="settings-section">
+                <h3>Model Parameters</h3>
+                <p className="settings-description">
+                  Configure temperature and max tokens for each model. Leave blank to use defaults.
+                  Reasoning models (o1, o3) ignore temperature settings.
+                </p>
+                <div className="parameters-list">
+                  {config.council_models.map((model) => (
+                    <div key={model} className="parameters-item">
+                      <span className="parameters-model-name">
+                        {getShortModelName(model)}
+                        {isReasoningModel(model) && (
+                          <span className="reasoning-note">(reasoning)</span>
+                        )}
+                      </span>
+                      <div className="parameters-inputs">
+                        <div className="parameter-field">
+                          <label>Temperature</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            placeholder="0.7"
+                            value={getModelParameter(model, 'temperature')}
+                            onChange={(e) => updateModelParameter(model, 'temperature', e.target.value)}
+                            disabled={isReasoningModel(model)}
+                            title={isReasoningModel(model) ? 'Reasoning models do not support temperature' : 'Response creativity (0=deterministic, 2=creative)'}
+                          />
+                        </div>
+                        <div className="parameter-field">
+                          <label>Max Tokens</label>
+                          <input
+                            type="number"
+                            min="100"
+                            max="32000"
+                            step="100"
+                            placeholder="4096"
+                            value={getModelParameter(model, 'max_tokens')}
+                            onChange={(e) => updateModelParameter(model, 'max_tokens', e.target.value)}
+                            title="Maximum response length in tokens"
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

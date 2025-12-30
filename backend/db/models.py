@@ -110,6 +110,40 @@ class ModelMetric(Base):
     message = relationship("Message", back_populates="metrics")
 
 
+class Preset(Base):
+    """Model configuration presets."""
+
+    __tablename__ = "presets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    council_models = Column(JSON, nullable=False)  # List of model IDs
+    chairman_model = Column(String(100), nullable=False)
+    model_weights = Column(JSON, nullable=True)  # model_id -> weight
+    model_parameters = Column(JSON, nullable=True)  # model_id -> {temperature, max_tokens}
+    ranking_criteria = Column(JSON, nullable=True)  # Custom criteria for this preset
+    is_default = Column(Integer, default=0)  # 1 if this is the active preset
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        """Convert to dictionary for API response."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "council_models": self.council_models,
+            "chairman_model": self.chairman_model,
+            "model_weights": self.model_weights or {},
+            "model_parameters": self.model_parameters or {},
+            "ranking_criteria": self.ranking_criteria,
+            "is_default": bool(self.is_default),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
 class Settings(Base):
     """Application settings stored in database."""
 
