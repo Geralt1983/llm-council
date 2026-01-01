@@ -15,6 +15,7 @@ function App() {
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [theme, setTheme] = useState('light');
   const [error, setError] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Load theme and conversations on mount
   useEffect(() => {
@@ -69,6 +70,8 @@ function App() {
         ...conversations,
       ]);
       setCurrentConversationId(newConv.id);
+      // Close sidebar on mobile when creating new conversation
+      setIsSidebarOpen(false);
     } catch (error) {
       console.error('Failed to create conversation:', error);
     }
@@ -76,6 +79,8 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+    // Close sidebar on mobile when selecting a conversation
+    setIsSidebarOpen(false);
   };
 
   const handleDeleteConversation = async (id) => {
@@ -266,6 +271,19 @@ function App() {
           <button onClick={() => setError(null)}>×</button>
         </div>
       )}
+      {/* Mobile menu toggle button */}
+      <button
+        className="mobile-menu-toggle"
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
+      >
+        {isSidebarOpen ? '✕' : '☰'}
+      </button>
+      {/* Mobile overlay */}
+      <div
+        className={`mobile-overlay ${isSidebarOpen ? 'visible' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+      />
       <div className="app-content">
         <Sidebar
           conversations={conversations}
@@ -276,6 +294,7 @@ function App() {
           onExportConversation={handleExportConversation}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenAnalytics={() => setIsAnalyticsOpen(true)}
+          isOpen={isSidebarOpen}
         />
         <ChatInterface
           conversation={currentConversation}

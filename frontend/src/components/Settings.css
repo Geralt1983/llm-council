@@ -1208,3 +1208,261 @@
 [data-theme="dark"] .search-result-pricing {
   color: #777;
 }
+
+/* ===== Mobile Responsive Settings ===== */
+
+@media (max-width: 768px) {
+  .settings-panel {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .settings-header {
+    padding: 16px;
+  }
+
+  .settings-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .close-button {
+    font-size: 1.75rem;
+    padding: 8px;
+  }
+
+  .settings-content {
+    padding: 16px;
+  }
+
+  .settings-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-bottom: 20px;
+  }
+
+  .settings-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-tab {
+    padding: 10px 16px;
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+
+  .settings-section {
+    margin-bottom: 24px;
+  }
+
+  .model-item {
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .model-info {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .model-name {
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+
+  .model-actions {
+    flex: 0 0 auto;
+  }
+
+  .model-action-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+
+  .theme-toggle {
+    flex-direction: column;
+  }
+
+  .theme-button {
+    padding: 14px 16px;
+  }
+
+  .custom-model {
+    flex-direction: column;
+  }
+
+  .custom-model input {
+    width: 100%;
+  }
+
+  .custom-model button {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .settings-footer {
+    flex-direction: column;
+    padding: 12px 16px;
+    gap: 8px;
+  }
+
+  .cancel-button,
+  .save-button {
+    width: 100%;
+    padding: 14px;
+  }
+
+  /* Preset styles mobile */
+  .config-summary-content {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .preset-item {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .preset-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .apply-preset-btn {
+    flex: 1;
+    padding: 10px 14px;
+  }
+
+  /* Parameters mobile */
+  .parameters-inputs {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .parameter-field {
+    min-width: 100%;
+  }
+
+  .parameter-field input {
+    width: 100%;
+  }
+
+  /* Weight slider mobile */
+  .weight-item {
+    flex-wrap: wrap;
+  }
+
+  .weight-model-name {
+    flex: 1 1 100%;
+    margin-bottom: 4px;
+  }
+
+  .weight-slider {
+    flex: 1;
+  }
+
+  /* Criteria mobile */
+  .criteria-description {
+    margin-left: 0;
+  }
+
+  .criteria-weight {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  /* Model search mobile */
+  .search-results {
+    max-height: 250px;
+  }
+
+  .search-result-item {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-header {
+    padding: 14px 12px;
+  }
+
+  .settings-header h2 {
+    font-size: 1rem;
+  }
+
+  .settings-content {
+    padding: 12px;
+  }
+
+  .settings-tab {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+  }
+
+  .settings-section h3 {
+    font-size: 0.9rem;
+  }
+
+  .settings-description {
+    font-size: 0.8rem;
+  }
+
+  .model-item {
+    padding: 10px;
+  }
+
+  .model-name {
+    font-size: 0.75rem;
+  }
+
+  .chairman-badge,
+  .reasoning-badge {
+    font-size: 0.6rem;
+    padding: 2px 5px;
+  }
+
+  .add-model select,
+  .chairman-select {
+    padding: 10px 12px;
+    font-size: 0.8rem;
+  }
+
+  .settings-footer {
+    padding: 10px 12px;
+  }
+
+  .cancel-button,
+  .save-button {
+    padding: 12px;
+    font-size: 0.875rem;
+  }
+
+  /* Preset mobile small */
+  .preset-name {
+    font-size: 0.9rem;
+  }
+
+  .preset-description,
+  .preset-details {
+    font-size: 0.7rem;
+  }
+
+  /* Toggle items mobile */
+  .toggle-item {
+    padding: 10px 12px;
+  }
+
+  .toggle-name {
+    font-size: 0.875rem;
+  }
+
+  .toggle-description {
+    font-size: 0.75rem;
+  }
+}

@@ -413,3 +413,195 @@
 [data-theme="dark"] .details-close:hover {
   color: #e5e5e5;
 }
+
+/* ===== Mobile Responsive Analytics ===== */
+
+@media (max-width: 768px) {
+  .analytics-panel {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .analytics-header {
+    padding: 16px;
+  }
+
+  .analytics-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .close-button {
+    font-size: 1.75rem;
+    padding: 8px;
+  }
+
+  .analytics-content {
+    padding: 16px;
+  }
+
+  .analytics-section {
+    margin-bottom: 24px;
+  }
+
+  .analytics-section h3 {
+    font-size: 0.9rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Stats grid mobile */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+  }
+
+  /* Model table - card view on mobile */
+  .model-table {
+    border: none;
+    background: none;
+  }
+
+  .model-table-header {
+    display: none;
+  }
+
+  .model-table-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color, #e5e5e5);
+    border-radius: 8px;
+    background: var(--bg-secondary, #f5f5f5);
+  }
+
+  .model-table-row:last-child {
+    margin-bottom: 0;
+  }
+
+  [data-theme="dark"] .model-table-row {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .col-model {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+
+  .col-queries,
+  .col-time,
+  .col-tokens,
+  .col-ranking,
+  .col-cost {
+    text-align: left;
+    font-size: 0.8rem;
+  }
+
+  .col-queries::before { content: "Queries: "; color: var(--text-secondary, #666); }
+  .col-time::before { content: "Avg Time: "; color: var(--text-secondary, #666); }
+  .col-tokens::before { content: "Avg Tokens: "; color: var(--text-secondary, #666); }
+  .col-ranking::before { content: "Avg Rank: "; color: var(--text-secondary, #666); }
+  .col-cost::before { content: "Total Cost: "; color: var(--text-secondary, #666); }
+
+  /* Model details mobile */
+  .model-details {
+    padding: 14px;
+  }
+
+  .model-details h3 {
+    font-size: 0.9rem;
+  }
+
+  .details-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .detail-group {
+    padding: 10px;
+  }
+
+  /* Footer mobile */
+  .analytics-footer {
+    flex-direction: column;
+    padding: 12px 16px;
+    gap: 8px;
+  }
+
+  .refresh-button,
+  .close-panel-button {
+    width: 100%;
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-header {
+    padding: 14px 12px;
+  }
+
+  .analytics-header h2 {
+    font-size: 1rem;
+  }
+
+  .analytics-content {
+    padding: 12px;
+  }
+
+  .stats-grid {
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 10px;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+  }
+
+  .model-table-row {
+    padding: 12px;
+  }
+
+  .col-model {
+    font-size: 0.8rem;
+  }
+
+  .col-queries,
+  .col-time,
+  .col-tokens,
+  .col-ranking,
+  .col-cost {
+    font-size: 0.75rem;
+  }
+
+  .analytics-footer {
+    padding: 10px 12px;
+  }
+
+  .refresh-button,
+  .close-panel-button {
+    padding: 12px;
+    font-size: 0.875rem;
+  }
+}

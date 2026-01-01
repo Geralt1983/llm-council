@@ -159,3 +159,65 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
+/* ===== Mobile Responsive Breakpoints ===== */
+
+/* Tablet: 768px - 1024px */
+@media (max-width: 1024px) {
+  .markdown-content {
+    padding: 10px;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    padding-left: 20px;
+  }
+}
+
+/* Mobile: 480px - 768px */
+@media (max-width: 768px) {
+  body {
+    min-width: 100%;
+  }
+
+  .markdown-content {
+    padding: 8px;
+  }
+
+  .markdown-content pre {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    padding-left: 16px;
+  }
+
+  /* Scrollbars - thinner on mobile */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+/* Small Mobile: < 480px */
+@media (max-width: 480px) {
+  .markdown-content {
+    padding: 6px;
+  }
+
+  .markdown-content h1 { font-size: 1.5em; }
+  .markdown-content h2 { font-size: 1.3em; }
+  .markdown-content h3 { font-size: 1.1em; }
+
+  .markdown-content pre {
+    padding: 8px;
+    font-size: 12px;
+    border-radius: 4px;
+  }
+
+  .markdown-content code {
+    font-size: 0.85em;
+  }
+}
