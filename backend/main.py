@@ -482,7 +482,8 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
             chairman_model = ""
 
             async for chunk in stage3_synthesize_streaming(
-                request.content, stage1_results, stage2_results
+                request.content, stage1_results, stage2_results,
+                aggregate_rankings=aggregate_rankings
             ):
                 chairman_model = chunk.get("model", "")
 

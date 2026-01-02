@@ -10,6 +10,12 @@ from .openrouter import (
     CircuitBreaker
 )
 from .config import get_council_models, get_chairman_model, get_model_parameters
+from .prompts import (
+    get_stage1_system_prompt,
+    build_enhanced_ranking_prompt,
+    build_enhanced_chairman_prompt,
+    get_prompt_config
+)
 
 
 # OpenRouter pricing per 1M tokens (approximate, varies by model)
@@ -60,19 +66,30 @@ def estimate_cost(model: str, metrics: Dict[str, Any]) -> float:
 
 def build_messages_with_history(
     user_query: str,
-    conversation_history: Optional[List[Dict[str, str]]] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    include_system_prompt: bool = True
 ) -> List[Dict[str, str]]:
     """
-    Build messages list including conversation history.
+    Build messages list including conversation history and system prompt.
 
     Args:
         user_query: The current user query
         conversation_history: Previous messages in the conversation
+        include_system_prompt: Whether to include the council member system prompt
 
     Returns:
         List of message dicts for the API
     """
     messages = []
+
+    # Add system prompt for council members
+    if include_system_prompt:
+        prompt_config = get_prompt_config()
+        system_prompt = get_stage1_system_prompt(
+            domain_hint=prompt_config.get("domain_hint"),
+            custom_instructions=prompt_config.get("custom_instructions")
+        )
+        messages.append({"role": "system", "content": system_prompt})
 
     # Add conversation history if provided
     if conversation_history:
@@ -236,6 +253,8 @@ def build_ranking_prompt(
     """
     Build the Stage 2 ranking prompt with optional custom criteria.
 
+    Uses the enhanced ranking prompt from prompts.py for better evaluation quality.
+
     Args:
         user_query: The original user question
         responses_text: Formatted anonymized responses
@@ -244,51 +263,7 @@ def build_ranking_prompt(
     Returns:
         The formatted ranking prompt
     """
-    # Build criteria section if custom criteria provided
-    criteria_text = ""
-    if ranking_criteria:
-        enabled_criteria = [c for c in ranking_criteria if c.get('enabled', True)]
-        if enabled_criteria:
-            criteria_list = "\n".join([
-                f"- **{c['name']}**: {c.get('description', '')}"
-                for c in enabled_criteria
-            ])
-            criteria_text = f"""
-Evaluate each response based on these criteria:
-{criteria_list}
-
-"""
-
-    return f"""You are evaluating different responses to the following question:
-
-Question: {user_query}
-
-Here are the responses from different models (anonymized):
-
-{responses_text}
-
-Your task:
-1. First, evaluate each response individually.{criteria_text} For each response, explain what it does well and what it does poorly.
-2. Then, at the very end of your response, provide a final ranking.
-
-IMPORTANT: Your final ranking MUST be formatted EXACTLY as follows:
-- Start with the line "FINAL RANKING:" (all caps, with colon)
-- Then list the responses from best to worst as a numbered list
-- Each line should be: number, period, space, then ONLY the response label (e.g., "1. Response A")
-- Do not add any other text or explanations in the ranking section
-
-Example of the correct format for your ENTIRE response:
-
-Response A provides good detail on X but misses Y...
-Response B is accurate but lacks depth on Z...
-Response C offers the most comprehensive answer...
-
-FINAL RANKING:
-1. Response C
-2. Response A
-3. Response B
-
-Now provide your evaluation and ranking:"""
+    return build_enhanced_ranking_prompt(user_query, responses_text, ranking_criteria)
 
 
 async def stage2_collect_rankings(
@@ -376,42 +351,26 @@ async def stage2_collect_rankings(
 def build_chairman_prompt(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
+    stage2_results: List[Dict[str, Any]],
+    aggregate_rankings: Optional[List[Dict[str, Any]]] = None
 ) -> str:
-    """Build the chairman synthesis prompt."""
-    stage1_text = "\n\n".join([
-        f"Model: {result['model']}\nResponse: {result['response']}"
-        for result in stage1_results
-    ])
+    """
+    Build the chairman synthesis prompt.
 
-    stage2_text = "\n\n".join([
-        f"Model: {result['model']}\nRanking: {result['ranking']}"
-        for result in stage2_results
-    ])
-
-    return f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
-
-Original Question: {user_query}
-
-STAGE 1 - Individual Responses:
-{stage1_text}
-
-STAGE 2 - Peer Rankings:
-{stage2_text}
-
-Your task as Chairman is to synthesize all of this information into a single, comprehensive, accurate answer to the user's original question. Consider:
-- The individual responses and their insights
-- The peer rankings and what they reveal about response quality
-- Any patterns of agreement or disagreement
-
-Provide a clear, well-reasoned final answer that represents the council's collective wisdom:"""
+    Uses the enhanced chairman prompt from prompts.py for genuine synthesis
+    rather than summarization.
+    """
+    return build_enhanced_chairman_prompt(
+        user_query, stage1_results, stage2_results, aggregate_rankings
+    )
 
 
 async def stage3_synthesize_final(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
     stage2_results: List[Dict[str, Any]],
-    use_circuit_breaker: bool = True
+    use_circuit_breaker: bool = True,
+    aggregate_rankings: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Stage 3: Chairman synthesizes final response.
@@ -421,11 +380,14 @@ async def stage3_synthesize_final(
         stage1_results: Individual model responses from Stage 1
         stage2_results: Rankings from Stage 2
         use_circuit_breaker: Whether to use circuit breaker protection
+        aggregate_rankings: Optional aggregate rankings to inform synthesis
 
     Returns:
         Tuple of (result dict, metrics dict)
     """
-    chairman_prompt = build_chairman_prompt(user_query, stage1_results, stage2_results)
+    chairman_prompt = build_chairman_prompt(
+        user_query, stage1_results, stage2_results, aggregate_rankings
+    )
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
@@ -477,7 +439,8 @@ async def stage3_synthesize_final(
 async def stage3_synthesize_streaming(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
+    stage2_results: List[Dict[str, Any]],
+    aggregate_rankings: Optional[List[Dict[str, Any]]] = None
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stage 3: Chairman synthesizes final response with token streaming.
@@ -485,7 +448,9 @@ async def stage3_synthesize_streaming(
     Yields:
         Dict with 'type' (token, done, error), 'model', and 'content'
     """
-    chairman_prompt = build_chairman_prompt(user_query, stage1_results, stage2_results)
+    chairman_prompt = build_chairman_prompt(
+        user_query, stage1_results, stage2_results, aggregate_rankings
+    )
     messages = [{"role": "user", "content": chairman_prompt}]
 
     chairman_model = get_chairman_model()
@@ -817,11 +782,12 @@ async def run_full_council(
             if metric['model_id'] == ranking['model'] and metric['stage'] == 'stage1':
                 metric['ranking_position'] = ranking['average_rank']
 
-    # Stage 3: Synthesize final answer
+    # Stage 3: Synthesize final answer (now with aggregate rankings for better context)
     stage3_result, stage3_metrics = await stage3_synthesize_final(
         user_query,
         stage1_results,
-        stage2_results
+        stage2_results,
+        aggregate_rankings=aggregate_rankings
     )
     all_metrics.append(stage3_metrics)
 
