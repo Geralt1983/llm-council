@@ -612,10 +612,11 @@ async def send_message_dialectic(conversation_id: str, request: SendMessageReque
 
                 elif event["type"] == "final_token":
                     final_response += event["content"]
-                    yield f"data: {json.dumps({'type': 'final_token', 'data': {'content': event['content']}})}\n\n"
+                    yield f"data: {json.dumps({'type': 'dialectic_final_token', 'data': {'content': event['content']}})}\n\n"
 
                 elif event["type"] == "complete":
                     final_response = event["final_response"]
+                    yield f"data: {json.dumps({'type': 'dialectic_complete', 'data': {'final_response': final_response}})}\n\n"
 
                 elif event["type"] == "error":
                     yield f"data: {json.dumps({'type': 'error', 'message': event['message']})}\n\n"

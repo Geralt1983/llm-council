@@ -159,47 +159,50 @@ function App() {
 
         await api.sendMessageDialectic(currentConversationId, content, (eventType, event) => {
           switch (eventType) {
-            case 'stage_start':
+            case 'dialectic_stage_start':
               setCurrentConversation((prev) => {
                 const messages = [...prev.messages];
                 const lastMsg = { ...messages[messages.length - 1] };
-                lastMsg.loading = { ...lastMsg.loading, [event.stage]: true };
-                lastMsg.currentStage = event.stage;
-                lastMsg.currentModel = event.model;
+                const stage = event.data?.stage || event.stage;
+                const model = event.data?.model || event.model;
+                lastMsg.loading = { ...lastMsg.loading, [stage]: true };
+                lastMsg.currentStage = stage;
+                lastMsg.currentModel = model;
                 messages[messages.length - 1] = lastMsg;
                 return { ...prev, messages };
               });
               break;
 
-            case 'stage_complete':
+            case 'dialectic_stage_complete':
               setCurrentConversation((prev) => {
                 const messages = [...prev.messages];
                 const lastMsg = { ...messages[messages.length - 1] };
-                lastMsg.dialecticStages[event.stage] = {
-                  content: event.content,
-                  model: event.model,
-                };
-                lastMsg.loading = { ...lastMsg.loading, [event.stage]: false };
+                const stage = event.data?.stage || event.stage;
+                const content = event.data?.content || event.content;
+                const model = event.data?.model || event.model;
+                lastMsg.dialecticStages[stage] = { content, model };
+                lastMsg.loading = { ...lastMsg.loading, [stage]: false };
                 messages[messages.length - 1] = lastMsg;
                 return { ...prev, messages };
               });
               break;
 
-            case 'final_token':
+            case 'dialectic_final_token':
               setCurrentConversation((prev) => {
                 const messages = [...prev.messages];
                 const lastMsg = { ...messages[messages.length - 1] };
-                lastMsg.finalResponse = (lastMsg.finalResponse || '') + event.content;
+                const tokenContent = event.data?.content || event.content;
+                lastMsg.finalResponse = (lastMsg.finalResponse || '') + tokenContent;
                 messages[messages.length - 1] = lastMsg;
                 return { ...prev, messages };
               });
               break;
 
-            case 'complete':
+            case 'dialectic_complete':
               setCurrentConversation((prev) => {
                 const messages = [...prev.messages];
                 const lastMsg = { ...messages[messages.length - 1] };
-                lastMsg.finalResponse = event.final_response;
+                lastMsg.finalResponse = event.data?.final_response || event.final_response;
                 lastMsg.loading = {
                   first_responder: false,
                   devils_advocate: false,
@@ -221,7 +224,7 @@ function App() {
               break;
 
             default:
-              console.log('Unknown dialectic event:', eventType);
+              console.log('Unknown dialectic event:', eventType, event);
           }
         });
       } else {
