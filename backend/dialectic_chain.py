@@ -350,9 +350,12 @@ async def run_dialectic_chain(
 
 async def _query_stage(model: str, prompt: str, model_params: Dict[str, Any]) -> Optional[str]:
     """Query a single stage in the dialectic chain."""
+    import logging
+    logger = logging.getLogger(__name__)
 
     # Check circuit breaker
     if not CircuitBreaker.can_execute(model):
+        logger.warning(f"Dialectic stage blocked by circuit breaker: {model}")
         return None
 
     # Get model-specific parameters
@@ -365,17 +368,21 @@ async def _query_stage(model: str, prompt: str, model_params: Dict[str, Any]) ->
             params["max_tokens"] = mp["max_tokens"]
 
     try:
+        logger.info(f"Dialectic stage querying model: {model}")
         response = await query_model(model, [{"role": "user", "content": prompt}], **params)
 
         if response and response.get("content"):
             CircuitBreaker.record_success(model)
+            logger.info(f"Dialectic stage success: {model}, response length: {len(response['content'])}")
             return response["content"]
         else:
             CircuitBreaker.record_failure(model)
+            logger.error(f"Dialectic stage empty response from {model}: {response}")
             return None
 
     except Exception as e:
         CircuitBreaker.record_failure(model)
+        logger.error(f"Dialectic stage error from {model}: {e}")
         return None
 
 
