@@ -158,6 +158,21 @@ function App() {
       // Send message with streaming
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
         switch (eventType) {
+          case 'council_config':
+            // Store council configuration for progress display
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = { ...messages[messages.length - 1] };
+              lastMsg.metadata = {
+                ...lastMsg.metadata,
+                council_models: event.data.council_models,
+                chairman_model: event.data.chairman_model,
+              };
+              messages[messages.length - 1] = lastMsg;
+              return { ...prev, messages };
+            });
+            break;
+
           case 'stage1_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
@@ -194,7 +209,11 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = { ...messages[messages.length - 1] };
               lastMsg.stage2 = event.data;
-              lastMsg.metadata = event.metadata;
+              // Merge stage2 metadata with existing council config metadata
+              lastMsg.metadata = {
+                ...lastMsg.metadata,
+                ...event.metadata,
+              };
               lastMsg.loading = { ...lastMsg.loading, stage2: false };
               messages[messages.length - 1] = lastMsg;
               return { ...prev, messages };

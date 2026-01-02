@@ -1,0 +1,479 @@
+/* ============================================
+   Council Progress Component
+   Visual progress indicator for 3-stage deliberation
+   ============================================ */
+
+.council-progress {
+  background: linear-gradient(135deg, var(--bg-secondary, #f8fafc) 0%, var(--bg-primary, #ffffff) 100%);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Header with title and timer */
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.progress-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a202c);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+.progress-timer {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #64748b);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  background: var(--bg-tertiary, #f1f5f9);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* Progress stages container */
+.progress-stages {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Individual stage */
+.progress-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Stage indicator circle */
+.stage-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+/* Stage states */
+.progress-stage.locked .stage-indicator {
+  background: var(--bg-tertiary, #f1f5f9);
+  color: var(--text-tertiary, #94a3b8);
+  border: 2px dashed var(--border-color, #e2e8f0);
+}
+
+.progress-stage.pending .stage-indicator {
+  background: var(--bg-tertiary, #f1f5f9);
+  color: var(--text-secondary, #64748b);
+  border: 2px solid var(--border-color, #e2e8f0);
+}
+
+.progress-stage.active .stage-indicator {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.progress-stage.complete .stage-indicator {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: 2px solid #10b981;
+}
+
+.stage-check {
+  font-size: 16px;
+}
+
+.stage-number {
+  font-size: 14px;
+}
+
+/* Spinner for active stage */
+.stage-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Stage info */
+.stage-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #1a202c);
+  margin-bottom: 4px;
+}
+
+.progress-stage.locked .stage-name,
+.progress-stage.pending .stage-name {
+  color: var(--text-tertiary, #94a3b8);
+}
+
+.progress-stage.active .stage-name {
+  color: #2563eb;
+}
+
+.progress-stage.complete .stage-name {
+  color: #059669;
+}
+
+.stage-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  min-height: 20px;
+}
+
+.model-count {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Model dots showing individual model progress */
+.model-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.model-dot.pending {
+  background: var(--bg-tertiary, #e2e8f0);
+  border: 1px solid var(--border-color, #cbd5e1);
+}
+
+.model-dot.filled {
+  background: #10b981;
+  border: 1px solid #059669;
+  animation: dotPop 0.3s ease;
+}
+
+@keyframes dotPop {
+  0% {
+    transform: scale(0.5);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.model-dot-more {
+  font-size: 10px;
+  color: var(--text-tertiary, #94a3b8);
+  margin-left: 2px;
+}
+
+.complete-text {
+  color: #059669;
+  font-weight: 500;
+}
+
+.locked-text {
+  color: var(--text-tertiary, #94a3b8);
+  font-style: italic;
+}
+
+.chairman-active {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* Connector between stages */
+.progress-connector {
+  display: flex;
+  align-items: center;
+  padding-top: 14px;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.connector-line {
+  width: 100%;
+  height: 2px;
+  background: var(--border-color, #e2e8f0);
+  border-radius: 1px;
+  transition: background 0.3s ease;
+}
+
+.progress-connector.active .connector-line {
+  background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+}
+
+/* Activity bar at bottom */
+.progress-activity {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+.activity-bar {
+  height: 3px;
+  background: var(--bg-tertiary, #f1f5f9);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.activity-fill {
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
+  background-size: 200% 100%;
+  border-radius: 2px;
+  animation: activitySlide 1.5s ease-in-out infinite;
+}
+
+@keyframes activitySlide {
+  0% {
+    transform: translateX(-100%);
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    transform: translateX(400%);
+    background-position: 0% 50%;
+  }
+}
+
+/* ============================================
+   Dark Mode
+   ============================================ */
+
+[data-theme="dark"] .council-progress {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-color: #334155;
+}
+
+[data-theme="dark"] .progress-title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .progress-timer {
+  background: #334155;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .progress-stage.locked .stage-indicator,
+[data-theme="dark"] .progress-stage.pending .stage-indicator {
+  background: #334155;
+  border-color: #475569;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .stage-name {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .progress-stage.locked .stage-name,
+[data-theme="dark"] .progress-stage.pending .stage-name {
+  color: #64748b;
+}
+
+[data-theme="dark"] .stage-detail {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .model-dot.pending {
+  background: #475569;
+  border-color: #64748b;
+}
+
+[data-theme="dark"] .connector-line {
+  background: #475569;
+}
+
+[data-theme="dark"] .locked-text {
+  color: #64748b;
+}
+
+[data-theme="dark"] .progress-activity {
+  border-color: #334155;
+}
+
+[data-theme="dark"] .activity-bar {
+  background: #334155;
+}
+
+/* ============================================
+   Mobile Responsive
+   ============================================ */
+
+@media (max-width: 768px) {
+  .council-progress {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border-radius: 10px;
+  }
+
+  .progress-header {
+    margin-bottom: 14px;
+  }
+
+  .progress-title {
+    font-size: 13px;
+  }
+
+  .progress-timer {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+
+  .progress-stages {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .progress-stage {
+    padding: 10px;
+    background: var(--bg-primary, #ffffff);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+  }
+
+  [data-theme="dark"] .progress-stage {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  .progress-stage.active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .progress-stage.complete {
+    border-color: #10b981;
+  }
+
+  .stage-indicator {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .stage-name {
+    font-size: 12px;
+  }
+
+  .stage-detail {
+    font-size: 11px;
+  }
+
+  .progress-connector {
+    display: none;
+  }
+
+  .model-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .progress-activity {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .council-progress {
+    padding: 12px 14px;
+  }
+
+  .progress-title {
+    font-size: 12px;
+  }
+
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .progress-timer {
+    font-size: 11px;
+  }
+
+  .progress-stage {
+    padding: 8px;
+  }
+
+  .stage-indicator {
+    width: 24px;
+    height: 24px;
+  }
+
+  .stage-check {
+    font-size: 12px;
+  }
+
+  .stage-spinner {
+    width: 12px;
+    height: 12px;
+  }
+
+  .stage-name {
+    font-size: 11px;
+  }
+
+  .stage-detail {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}

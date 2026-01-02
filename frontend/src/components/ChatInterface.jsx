@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import CouncilProgress from './CouncilProgress';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -72,22 +73,22 @@ export default function ChatInterface({
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
 
-                  {/* Stage 1 */}
-                  {msg.loading?.stage1 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 1: Collecting individual responses...</span>
-                    </div>
-                  )}
+                  {/* Progress Indicator - shows during active deliberation */}
+                  <CouncilProgress
+                    stage1Loading={msg.loading?.stage1}
+                    stage1Data={msg.stage1}
+                    stage2Loading={msg.loading?.stage2}
+                    stage2Data={msg.stage2}
+                    stage3Loading={msg.loading?.stage3}
+                    stage3Data={msg.stage3}
+                    councilModels={msg.metadata?.council_models || []}
+                    chairmanModel={msg.metadata?.chairman_model}
+                  />
+
+                  {/* Stage 1 - Individual Responses */}
                   {msg.stage1 && <Stage1 responses={msg.stage1} />}
 
-                  {/* Stage 2 */}
-                  {msg.loading?.stage2 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 2: Peer rankings...</span>
-                    </div>
-                  )}
+                  {/* Stage 2 - Peer Rankings */}
                   {msg.stage2 && (
                     <Stage2
                       rankings={msg.stage2}
@@ -97,13 +98,7 @@ export default function ChatInterface({
                     />
                   )}
 
-                  {/* Stage 3 */}
-                  {msg.loading?.stage3 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 3: Final synthesis...</span>
-                    </div>
-                  )}
+                  {/* Stage 3 - Final Synthesis */}
                   {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
                 </div>
               )}

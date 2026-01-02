@@ -307,6 +307,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
+            # Send council configuration for progress display
+            yield f"data: {json.dumps({'type': 'council_config', 'data': {'council_models': config.get('council_models', []), 'chairman_model': config.get('chairman_model', '')}})}\n\n"
+
             # Stage 1: Collect responses (with conversation history)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results, stage1_metrics = await stage1_collect_responses(
@@ -430,6 +433,9 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
             title_task = None
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
+
+            # Send council configuration for progress display
+            yield f"data: {json.dumps({'type': 'council_config', 'data': {'council_models': config.get('council_models', []), 'chairman_model': config.get('chairman_model', '')}})}\n\n"
 
             # Stage 1
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
