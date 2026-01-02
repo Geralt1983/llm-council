@@ -1,0 +1,246 @@
+.dialectic-response {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Final Response - The main output */
+.final-response {
+  background: linear-gradient(135deg, #f0fff4 0%, #e6ffed 100%);
+  border: 1px solid #27ae60;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.final-response-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(39, 174, 96, 0.1);
+  border-bottom: 1px solid rgba(39, 174, 96, 0.2);
+}
+
+.final-icon {
+  font-size: 18px;
+}
+
+.final-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e8449;
+  letter-spacing: 0.3px;
+}
+
+.final-response-content {
+  padding: 16px;
+}
+
+.final-response-content h1,
+.final-response-content h2,
+.final-response-content h3 {
+  color: #1e8449;
+  margin-top: 16px;
+}
+
+.final-response-content h1:first-child,
+.final-response-content h2:first-child,
+.final-response-content h3:first-child {
+  margin-top: 0;
+}
+
+/* Thinking Process - Expandable sections */
+.thinking-process {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.thinking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #e9ecef;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.thinking-count {
+  font-weight: 400;
+  text-transform: none;
+}
+
+.thinking-stages {
+  display: flex;
+  flex-direction: column;
+}
+
+.thinking-stage {
+  border-bottom: 1px solid #e9ecef;
+}
+
+.thinking-stage:last-child {
+  border-bottom: none;
+}
+
+.stage-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.stage-toggle:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.stage-toggle.expanded {
+  background: rgba(0, 0, 0, 0.02);
+  border-left: 3px solid var(--stage-color);
+}
+
+.toggle-icon {
+  font-size: 16px;
+}
+
+.toggle-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: #343a40;
+}
+
+.toggle-model {
+  flex: 1;
+  font-size: 11px;
+  color: #868e96;
+  text-align: right;
+  margin-right: 8px;
+}
+
+.toggle-arrow {
+  font-size: 10px;
+  color: #adb5bd;
+  transition: transform 0.2s;
+}
+
+.stage-toggle.expanded .toggle-arrow {
+  color: var(--stage-color);
+}
+
+.stage-content {
+  padding: 12px 14px 16px 40px;
+  background: #fff;
+  border-top: 1px solid #e9ecef;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #495057;
+}
+
+.stage-content h1,
+.stage-content h2,
+.stage-content h3 {
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+.stage-content h1:first-child,
+.stage-content h2:first-child,
+.stage-content h3:first-child {
+  margin-top: 0;
+}
+
+.stage-content ul,
+.stage-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.stage-content li {
+  margin-bottom: 4px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .final-response-header {
+    padding: 10px 12px;
+  }
+
+  .final-response-content {
+    padding: 12px;
+  }
+
+  .stage-toggle {
+    padding: 8px 12px;
+  }
+
+  .stage-content {
+    padding: 10px 12px 14px 32px;
+  }
+
+  .toggle-model {
+    display: none;
+  }
+}
+
+/* Dark mode support */
+[data-theme="dark"] .final-response {
+  background: linear-gradient(135deg, #0d3320 0%, #1a4731 100%);
+  border-color: #27ae60;
+}
+
+[data-theme="dark"] .final-response-header {
+  background: rgba(39, 174, 96, 0.2);
+}
+
+[data-theme="dark"] .final-label {
+  color: #58d68d;
+}
+
+[data-theme="dark"] .final-response-content {
+  color: #e9ecef;
+}
+
+[data-theme="dark"] .final-response-content h1,
+[data-theme="dark"] .final-response-content h2,
+[data-theme="dark"] .final-response-content h3 {
+  color: #58d68d;
+}
+
+[data-theme="dark"] .thinking-process {
+  background: #1a1a2e;
+  border-color: #2d2d44;
+}
+
+[data-theme="dark"] .thinking-header {
+  background: #2d2d44;
+  color: #a8b2d1;
+}
+
+[data-theme="dark"] .thinking-stage {
+  border-color: #2d2d44;
+}
+
+[data-theme="dark"] .stage-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .toggle-label {
+  color: #e6f1ff;
+}
+
+[data-theme="dark"] .stage-content {
+  background: #16213e;
+  border-color: #2d2d44;
+  color: #a8b2d1;
+}

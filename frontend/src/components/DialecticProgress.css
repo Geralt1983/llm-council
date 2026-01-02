@@ -1,0 +1,135 @@
+.dialectic-progress {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  color: #fff;
+}
+
+.dialectic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dialectic-title {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #a8b2d1;
+}
+
+.dialectic-subtitle {
+  font-size: 12px;
+  color: #64ffda;
+}
+
+.dialectic-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dialectic-stage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.dialectic-stage.pending {
+  opacity: 0.4;
+}
+
+.dialectic-stage.active {
+  background: rgba(100, 255, 218, 0.1);
+  border: 1px solid rgba(100, 255, 218, 0.3);
+  animation: pulse 2s infinite;
+}
+
+.dialectic-stage.complete {
+  background: rgba(100, 255, 218, 0.05);
+  opacity: 0.8;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(100, 255, 218, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(100, 255, 218, 0);
+  }
+}
+
+.stage-icon {
+  font-size: 20px;
+  width: 32px;
+  text-align: center;
+}
+
+.stage-info {
+  flex: 1;
+}
+
+.stage-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: #e6f1ff;
+}
+
+.stage-model {
+  font-size: 11px;
+  color: #8892b0;
+  margin-top: 2px;
+}
+
+.stage-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(100, 255, 218, 0.3);
+  border-top-color: #64ffda;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.stage-check {
+  color: #64ffda;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.stage-connector {
+  display: none; /* Hidden for now, could add vertical line connector */
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .dialectic-progress {
+    padding: 12px 14px;
+  }
+
+  .dialectic-stage {
+    padding: 8px 10px;
+  }
+
+  .stage-icon {
+    font-size: 18px;
+    width: 28px;
+  }
+
+  .stage-label {
+    font-size: 12px;
+  }
+}

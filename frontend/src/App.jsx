@@ -16,6 +16,7 @@ function App() {
   const [theme, setTheme] = useState('light');
   const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [dialecticMode, setDialecticMode] = useState(true); // Life-changing output mode
 
   // Load theme and conversations on mount
   useEffect(() => {
@@ -135,145 +136,228 @@ function App() {
         messages: [...prev.messages, userMessage],
       }));
 
-      // Create a partial assistant message that will be updated progressively
-      const assistantMessage = {
-        role: 'assistant',
-        stage1: null,
-        stage2: null,
-        stage3: null,
-        metadata: null,
-        loading: {
-          stage1: false,
-          stage2: false,
-          stage3: false,
-        },
-      };
+      if (dialecticMode) {
+        // Dialectic Chain Mode - Life-changing output
+        const assistantMessage = {
+          role: 'assistant',
+          isDialectic: true,
+          dialecticStages: {},
+          finalResponse: '',
+          loading: {
+            first_responder: false,
+            devils_advocate: false,
+            deep_insight: false,
+            action_coach: false,
+            final_synthesis: false,
+          },
+        };
 
-      // Add the partial assistant message
-      setCurrentConversation((prev) => ({
-        ...prev,
-        messages: [...prev.messages, assistantMessage],
-      }));
+        setCurrentConversation((prev) => ({
+          ...prev,
+          messages: [...prev.messages, assistantMessage],
+        }));
 
-      // Send message with streaming
-      await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
-        switch (eventType) {
-          case 'council_config':
-            // Store council configuration for progress display
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.metadata = {
-                ...lastMsg.metadata,
-                council_models: event.data.council_models,
-                chairman_model: event.data.chairman_model,
-              };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+        await api.sendMessageDialectic(currentConversationId, content, (eventType, event) => {
+          switch (eventType) {
+            case 'stage_start':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.loading = { ...lastMsg.loading, [event.stage]: true };
+                lastMsg.currentStage = event.stage;
+                lastMsg.currentModel = event.model;
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          case 'stage1_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.loading = { ...lastMsg.loading, stage1: true };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+            case 'stage_complete':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.dialecticStages[event.stage] = {
+                  content: event.content,
+                  model: event.model,
+                };
+                lastMsg.loading = { ...lastMsg.loading, [event.stage]: false };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          case 'stage1_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.stage1 = event.data;
-              lastMsg.loading = { ...lastMsg.loading, stage1: false };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+            case 'final_token':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.finalResponse = (lastMsg.finalResponse || '') + event.content;
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          case 'stage2_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.loading = { ...lastMsg.loading, stage2: true };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+            case 'complete':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.finalResponse = event.final_response;
+                lastMsg.loading = {
+                  first_responder: false,
+                  devils_advocate: false,
+                  deep_insight: false,
+                  action_coach: false,
+                  final_synthesis: false,
+                };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              loadConversations();
+              setIsLoading(false);
+              break;
 
-          case 'stage2_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.stage2 = event.data;
-              // Merge stage2 metadata with existing council config metadata
-              lastMsg.metadata = {
-                ...lastMsg.metadata,
-                ...event.metadata,
-              };
-              lastMsg.loading = { ...lastMsg.loading, stage2: false };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+            case 'error':
+              console.error('Dialectic error:', event.message);
+              setError(`Dialectic chain error: ${event.message}`);
+              setIsLoading(false);
+              break;
 
-          case 'stage3_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.loading = { ...lastMsg.loading, stage3: true };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+            default:
+              console.log('Unknown dialectic event:', eventType);
+          }
+        });
+      } else {
+        // Standard Council Mode - Parallel voting
+        const assistantMessage = {
+          role: 'assistant',
+          stage1: null,
+          stage2: null,
+          stage3: null,
+          metadata: null,
+          loading: {
+            stage1: false,
+            stage2: false,
+            stage3: false,
+          },
+        };
 
-          case 'stage3_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = { ...messages[messages.length - 1] };
-              lastMsg.stage3 = event.data;
-              lastMsg.loading = { ...lastMsg.loading, stage3: false };
-              messages[messages.length - 1] = lastMsg;
-              return { ...prev, messages };
-            });
-            break;
+        setCurrentConversation((prev) => ({
+          ...prev,
+          messages: [...prev.messages, assistantMessage],
+        }));
 
-          case 'title_complete':
-            // Update conversation title in list
-            setConversations((prev) =>
-              prev.map((c) =>
-                c.id === currentConversationId ? { ...c, title: event.data.title } : c
-              )
-            );
-            setCurrentConversation((prev) => ({
-              ...prev,
-              title: event.data.title,
-            }));
-            break;
+        await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
+          switch (eventType) {
+            case 'council_config':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.metadata = {
+                  ...lastMsg.metadata,
+                  council_models: event.data.council_models,
+                  chairman_model: event.data.chairman_model,
+                };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          case 'complete':
-            // Stream complete, reload conversations list
-            loadConversations();
-            setIsLoading(false);
-            break;
+            case 'stage1_start':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.loading = { ...lastMsg.loading, stage1: true };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          case 'error':
-            console.error('Stream error:', event.message);
-            setError(`Council error: ${event.message}`);
-            setIsLoading(false);
-            break;
+            case 'stage1_complete':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.stage1 = event.data;
+                lastMsg.loading = { ...lastMsg.loading, stage1: false };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
 
-          default:
-            console.log('Unknown event type:', eventType);
-        }
-      });
+            case 'stage2_start':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.loading = { ...lastMsg.loading, stage2: true };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
+
+            case 'stage2_complete':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.stage2 = event.data;
+                lastMsg.metadata = {
+                  ...lastMsg.metadata,
+                  ...event.metadata,
+                };
+                lastMsg.loading = { ...lastMsg.loading, stage2: false };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
+
+            case 'stage3_start':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.loading = { ...lastMsg.loading, stage3: true };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
+
+            case 'stage3_complete':
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastMsg = { ...messages[messages.length - 1] };
+                lastMsg.stage3 = event.data;
+                lastMsg.loading = { ...lastMsg.loading, stage3: false };
+                messages[messages.length - 1] = lastMsg;
+                return { ...prev, messages };
+              });
+              break;
+
+            case 'title_complete':
+              setConversations((prev) =>
+                prev.map((c) =>
+                  c.id === currentConversationId ? { ...c, title: event.data.title } : c
+                )
+              );
+              setCurrentConversation((prev) => ({
+                ...prev,
+                title: event.data.title,
+              }));
+              break;
+
+            case 'complete':
+              loadConversations();
+              setIsLoading(false);
+              break;
+
+            case 'error':
+              console.error('Stream error:', event.message);
+              setError(`Council error: ${event.message}`);
+              setIsLoading(false);
+              break;
+
+            default:
+              console.log('Unknown event type:', eventType);
+          }
+        });
+      }
     } catch (err) {
       console.error('Failed to send message:', err);
       setError(`Failed to send message: ${err.message}`);
-      // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,
         messages: prev.messages.slice(0, -2),
@@ -319,6 +403,8 @@ function App() {
           conversation={currentConversation}
           onSendMessage={handleSendMessage}
           isLoading={isLoading}
+          dialecticMode={dialecticMode}
+          onToggleDialecticMode={() => setDialecticMode(!dialecticMode)}
           onExport={(format) =>
             currentConversationId && handleExportConversation(currentConversationId, format)
           }

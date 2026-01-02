@@ -4,12 +4,16 @@ import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
 import CouncilProgress from './CouncilProgress';
+import DialecticProgress from './DialecticProgress';
+import DialecticResponse from './DialecticResponse';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
+  dialecticMode,
+  onToggleDialecticMode,
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
@@ -69,6 +73,29 @@ export default function ChatInterface({
                     </div>
                   </div>
                 </div>
+              ) : msg.isDialectic ? (
+                <div className="assistant-message dialectic">
+                  <div className="message-label">
+                    <span>Dialectic Chain</span>
+                    <span className="dialectic-badge">Life-Changing Mode</span>
+                  </div>
+
+                  {/* Dialectic Progress */}
+                  <DialecticProgress
+                    loading={msg.loading || {}}
+                    stages={msg.dialecticStages || {}}
+                    currentStage={msg.currentStage}
+                    currentModel={msg.currentModel}
+                  />
+
+                  {/* Final Response with expandable thinking */}
+                  {msg.finalResponse && (
+                    <DialecticResponse
+                      stages={msg.dialecticStages || {}}
+                      finalResponse={msg.finalResponse}
+                    />
+                  )}
+                </div>
               ) : (
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
@@ -117,11 +144,23 @@ export default function ChatInterface({
       </div>
 
       <form className="input-form" onSubmit={handleSubmit}>
+        <div className="input-controls">
+          <button
+            type="button"
+            className={`mode-toggle ${dialecticMode ? 'dialectic' : 'council'}`}
+            onClick={onToggleDialecticMode}
+            title={dialecticMode ? 'Dialectic Chain: Sequential refinement for life-changing output' : 'Council Mode: Parallel voting for balanced consensus'}
+          >
+            {dialecticMode ? '✨ Dialectic' : '🗳️ Council'}
+          </button>
+        </div>
         <textarea
           className="message-input"
-          placeholder={conversation.messages.length === 0
-            ? "Ask your question... (Shift+Enter for new line, Enter to send)"
-            : "Ask a follow-up question..."
+          placeholder={dialecticMode
+            ? "Ask for life-changing advice... (Dialectic Chain: 5 stages of deep refinement)"
+            : conversation.messages.length === 0
+              ? "Ask your question... (Shift+Enter for new line, Enter to send)"
+              : "Ask a follow-up question..."
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}

@@ -21,6 +21,7 @@ from .council import (
     calculate_aggregate_rankings,
     calculate_dissent_metrics
 )
+from .dialectic_chain import run_dialectic_chain
 from .openrouter import CircuitBreaker, fetch_available_models, format_model_for_display
 from .db.session import init_db, migrate_from_json
 
@@ -540,6 +541,135 @@ async def send_message_stream_tokens(conversation_id: str, request: SendMessageR
             message_id = storage.get_last_message_id(conversation_id)
             if message_id and all_metrics:
                 storage.save_model_metrics(message_id, all_metrics)
+
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.post("/api/conversations/{conversation_id}/message/dialectic")
+async def send_message_dialectic(conversation_id: str, request: SendMessageRequest):
+    """
+    Send a message using the Dialectic Chain workflow.
+
+    This is a fundamentally different approach from the standard council:
+    - Sequential refinement instead of parallel voting
+    - Each model builds on and challenges the previous
+    - Produces more specific, actionable, life-changing output
+
+    Stages:
+    1. First Responder: Comprehensive initial answer
+    2. Devil's Advocate: Challenges assumptions, finds gaps
+    3. Deep Insight: Synthesizes into non-obvious wisdom
+    4. Action Coach: Transforms into specific action steps
+    5. Final Synthesis: Unified life-changing response (streamed)
+
+    Returns Server-Sent Events for each stage.
+    """
+    # Check if conversation exists
+    conversation = storage.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    is_first_message = len(conversation["messages"]) == 0
+
+    async def event_generator():
+        try:
+            # Add user message
+            storage.add_user_message(conversation_id, request.content)
+
+            # Start title generation in parallel
+            title_task = None
+            if is_first_message:
+                title_task = asyncio.create_task(generate_conversation_title(request.content))
+
+            # Send workflow type
+            yield f"data: {json.dumps({'type': 'workflow', 'data': {'mode': 'dialectic'}})}\n\n"
+
+            stages_data = {}
+            final_response = ""
+
+            async for event in run_dialectic_chain(request.content):
+                if event["type"] == "stage_start":
+                    yield f"data: {json.dumps({'type': 'dialectic_stage_start', 'data': {'stage': event['stage'], 'model': event.get('model', '')}})}\n\n"
+
+                elif event["type"] == "stage_complete":
+                    stages_data[event["stage"]] = {
+                        "content": event["content"],
+                        "model": event["model"]
+                    }
+                    yield f"data: {json.dumps({'type': 'dialectic_stage_complete', 'data': {'stage': event['stage'], 'content': event['content'], 'model': event['model']}})}\n\n"
+
+                elif event["type"] == "final_token":
+                    final_response += event["content"]
+                    yield f"data: {json.dumps({'type': 'final_token', 'data': {'content': event['content']}})}\n\n"
+
+                elif event["type"] == "complete":
+                    final_response = event["final_response"]
+
+                elif event["type"] == "error":
+                    yield f"data: {json.dumps({'type': 'error', 'message': event['message']})}\n\n"
+                    return
+
+            # Wait for title generation
+            if title_task:
+                title = await title_task
+                storage.update_conversation_title(conversation_id, title)
+                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+
+            # Save as assistant message
+            # Format dialectic stages into a structure compatible with storage
+            stage1_results = [{
+                "model": stages_data.get("first_responder", {}).get("model", "unknown"),
+                "response": stages_data.get("first_responder", {}).get("content", "")
+            }]
+
+            # Store the challenge and insight as stage2-like data
+            stage2_results = [
+                {
+                    "model": stages_data.get("devils_advocate", {}).get("model", "unknown"),
+                    "ranking": stages_data.get("devils_advocate", {}).get("content", ""),
+                    "role": "devils_advocate"
+                },
+                {
+                    "model": stages_data.get("deep_insight", {}).get("model", "unknown"),
+                    "ranking": stages_data.get("deep_insight", {}).get("content", ""),
+                    "role": "deep_insight"
+                },
+                {
+                    "model": stages_data.get("action_coach", {}).get("model", "unknown"),
+                    "ranking": stages_data.get("action_coach", {}).get("content", ""),
+                    "role": "action_coach"
+                }
+            ]
+
+            stage3_result = {
+                "model": stages_data.get("final_synthesis", {}).get("model", "unknown"),
+                "response": final_response
+            }
+
+            metadata = {
+                "workflow": "dialectic",
+                "stages": stages_data
+            }
+
+            storage.add_assistant_message(
+                conversation_id,
+                stage1_results,
+                stage2_results,
+                stage3_result,
+                metadata
+            )
 
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
